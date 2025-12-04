@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "267338469966",
+    "project_id": "raksha-ireland-app",
+    "storage_bucket": "raksha-ireland-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:267338469966:android:9f4dcf927a787fc673e91f",
+        "android_client_info": {
+          "package_name": "com.areiva.raksha_ireland"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBLkrUSTdQsBgchVDOOvhv84vfntzaEyBU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
