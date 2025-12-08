@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    
+    <!-- Red gradient background -->
+    <gradient
+        android:angle="135"
+        android:startColor="#FF3B30"
+        android:centerColor="#E31E24"
+        android:endColor="#C70D13"
+        android:type="linear" />
+    
+    <!-- Shadow effect -->
+    <stroke
+        android:width="4dp"
+        android:color="#40000000" />
+    
+    <size
+        android:width="120dp"
+        android:height="120dp" />
+
+</shape>

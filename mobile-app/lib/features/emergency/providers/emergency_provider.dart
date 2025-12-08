@@ -1,7 +1,12 @@
 import 'package:flutter/foundation.dart';
 import '../../../core/services/location_service.dart';
 import '../../../core/services/notification_service.dart';
+import '../../../core/config/app_config.dart';
 import 'dart:async';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:geolocator/geolocator.dart';
 
 /// Emergency alert model
 class EmergencyAlert {
@@ -12,7 +17,10 @@ class EmergencyAlert {
   final DateTime timestamp;
   final int radiusMeters;
   final EmergencyStatus status;
-  final int responderCount;
+  final String? userName;
+  final String? userEmail;
+  final String? userPhone;
+  final String? userProfilePicUrl;
   
   EmergencyAlert({
     required this.id,
@@ -22,7 +30,10 @@ class EmergencyAlert {
     required this.timestamp,
     this.radiusMeters = 3000,
     this.status = EmergencyStatus.active,
-    this.responderCount = 0,
+    this.userName,
+    this.userEmail,
+    this.userPhone,
+    this.userProfilePicUrl,
   });
   
   /// Convert to JSON
@@ -35,7 +46,10 @@ class EmergencyAlert {
       'timestamp': timestamp.toIso8601String(),
       'radiusMeters': radiusMeters,
       'status': status.name,
-      'responderCount': responderCount,
+      'userName': userName,
+      'userEmail': userEmail,
+      'userPhone': userPhone,
+      'userProfilePicUrl': userProfilePicUrl,
     };
   }
   
@@ -52,7 +66,10 @@ class EmergencyAlert {
         (s) => s.name == json['status'],
         orElse: () => EmergencyStatus.active,
       ),
-      responderCount: json['responderCount'] ?? 0,
+      userName: json['userName'],
+      userEmail: json['userEmail'],
+      userPhone: json['userPhone'],
+      userProfilePicUrl: json['userProfilePicUrl'],
     );
   }
   
@@ -65,7 +82,10 @@ class EmergencyAlert {
     DateTime? timestamp,
     int? radiusMeters,
     EmergencyStatus? status,
-    int? responderCount,
+    String? userName,
+    String? userEmail,
+    String? userPhone,
+    String? userProfilePicUrl,
   }) {
     return EmergencyAlert(
       id: id ?? this.id,
@@ -75,7 +95,10 @@ class EmergencyAlert {
       timestamp: timestamp ?? this.timestamp,
       radiusMeters: radiusMeters ?? this.radiusMeters,
       status: status ?? this.status,
-      responderCount: responderCount ?? this.responderCount,
+      userName: userName ?? this.userName,
+      userEmail: userEmail ?? this.userEmail,
+      userPhone: userPhone ?? this.userPhone,
+      userProfilePicUrl: userProfilePicUrl ?? this.userProfilePicUrl,
     );
   }
 }
@@ -85,7 +108,6 @@ enum EmergencyStatus {
   active,
   resolved,
   cancelled,
-  expired,
 }
 
 /// SOS button state enumeration
@@ -221,6 +243,11 @@ class EmergencyProvider extends ChangeNotifier {
       _currentLocation = await _locationService.getCurrentLocation();
       notifyListeners();
       
+      // Send location update to backend
+      if (_currentLocation != null) {
+        await _sendLocationToBackend(_currentLocation!);
+      }
+      
       if (kDebugMode) {
         print('Location updated: $_currentLocation');
       }
@@ -230,6 +257,37 @@ class EmergencyProvider extends ChangeNotifier {
         print('Error updating location: $e');
       }
       _setError('Failed to get current location');
+    }
+  }
+
+  /// Send location update to backend
+  Future<void> _sendLocationToBackend(LocationData location) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final token = await user.getIdToken();
+      if (token == null) return;
+
+      final response = await http.put(
+        Uri.parse('${AppConfig.apiBaseUrl}/users/location'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'latitude': location.latitude,
+          'longitude': location.longitude,
+        }),
+      );
+
+      if (kDebugMode) {
+        print('Location sent to backend: ${response.statusCode}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error sending location to backend: $e');
+      }
     }
   }
   
@@ -265,26 +323,35 @@ class EmergencyProvider extends ChangeNotifier {
       
       _updateSOSButtonState(SOSButtonState.sending);
       
-      // Create emergency alert
-      final alert = EmergencyAlert(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+      // Create temporary alert for sending
+      final tempAlert = EmergencyAlert(
+        id: 'temp', // This will be replaced by server ID
         userId: 'current_user_id', // Would get from auth provider
         location: _currentLocation!,
         message: customMessage ?? 'Emergency assistance needed',
         timestamp: DateTime.now(),
       );
       
-      // Send alert to backend (mock implementation)
-      await _sendEmergencyAlert(alert);
+      // Send alert to backend and get server alert with real ID
+      final serverAlert = await _sendEmergencyAlert(tempAlert);
       
-      _currentEmergencyAlert = alert;
+      if (serverAlert == null) {
+        _setError('Failed to send emergency alert to server');
+        _updateSOSButtonState(SOSButtonState.idle);
+        return false;
+      }
+      
+      // Use server alert with REAL UUID
+      _currentEmergencyAlert = serverAlert;
       _updateSOSButtonState(SOSButtonState.sent);
       
       // Start cooldown timer (60 seconds)
       _startCooldownTimer();
       
       if (kDebugMode) {
-        print('Emergency alert sent: ${alert.id}');
+        print('✅ Emergency alert sent successfully!');
+        print('📋 Server Alert ID: ${serverAlert.id}');
+        print('📍 Location: ${serverAlert.location.latitude}, ${serverAlert.location.longitude}');
       }
       
       return true;
@@ -299,22 +366,64 @@ class EmergencyProvider extends ChangeNotifier {
     }
   }
   
-  /// Send emergency alert to backend (mock implementation)
-  Future<void> _sendEmergencyAlert(EmergencyAlert alert) async {
-    // Simulate API call delay
-    await Future.delayed(const Duration(seconds: 2));
-    
-    // In real implementation, this would:
-    // 1. Send alert data to backend API
-    // 2. Backend finds users within 3km radius
-    // 3. Backend sends push notifications to nearby users
-    // 4. Return list of notified users
-    
-    // For now, simulate finding nearby users
-    final nearbyUsers = await _locationService.getUsersWithinRadius(alert.location);
-    
-    if (kDebugMode) {
-      print('Alert sent to ${nearbyUsers.length} nearby users');
+  /// Send emergency alert to backend
+  Future<EmergencyAlert?> _sendEmergencyAlert(EmergencyAlert alert) async {
+    try {
+      // Import required packages at the top of the file:
+      // import 'package:http/http.dart' as http;
+      // import 'dart:convert';
+      // import 'package:firebase_auth/firebase_auth.dart';
+      
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final token = await user.getIdToken();
+      
+      // Send alert to backend API
+      final response = await http.post(
+        Uri.parse('${AppConfig.apiBaseUrl}/emergency/alerts'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'latitude': alert.location.latitude,
+          'longitude': alert.location.longitude,
+          'accuracy': alert.location.accuracy,
+          'address': alert.location.address,
+          'message': alert.message,
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body);
+        final serverAlert = data['alert'];
+        
+        if (kDebugMode) {
+          print('✅ Alert saved to backend with ID: ${serverAlert['id']}');
+          print('📍 Location: (${serverAlert['latitude']}, ${serverAlert['longitude']})');
+        }
+        
+        // Return EmergencyAlert with REAL server ID
+        return EmergencyAlert(
+          id: serverAlert['id'],                    // ✅ USE SERVER UUID
+          userId: serverAlert['user_id'],
+          location: alert.location,                  // Server doesn't return full location, reuse
+          message: serverAlert['message'],
+          timestamp: DateTime.parse(serverAlert['created_at']),
+          status: _parseStatus(serverAlert['status']),
+        );
+      } else {
+        throw Exception('Failed to save alert: ${response.statusCode}');
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error sending alert to backend: $e');
+      }
+      return null; // Return null on failure instead of swallowing error
     }
   }
   
@@ -339,28 +448,80 @@ class EmergencyProvider extends ChangeNotifier {
   Future<bool> cancelEmergencyAlert() async {
     try {
       if (_currentEmergencyAlert == null) {
+        if (kDebugMode) {
+          print('❌ Cannot cancel: No current emergency alert');
+        }
         return false;
+      }
+      
+      if (kDebugMode) {
+        print('🔄 Attempting to cancel alert ID: ${_currentEmergencyAlert!.id}');
+        print('   Alert status: ${_currentEmergencyAlert!.status}');
       }
       
       _setLoading(true);
       
-      // Update alert status to cancelled
-      _currentEmergencyAlert = _currentEmergencyAlert!.copyWith(
-        status: EmergencyStatus.cancelled,
-      );
-      
-      // Send cancellation to backend (mock)
-      await Future.delayed(const Duration(seconds: 1));
-      
-      if (kDebugMode) {
-        print('Emergency alert cancelled: ${_currentEmergencyAlert!.id}');
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (kDebugMode) {
+          print('❌ User not authenticated');
+        }
+        return false;
       }
+
+      final token = await user.getIdToken();
+      if (token == null) {
+        if (kDebugMode) {
+          print('❌ Failed to get authentication token');
+        }
+        return false;
+      }
+
+      final url = '${AppConfig.apiBaseUrl}/emergency/alerts/${_currentEmergencyAlert!.id}';
+      if (kDebugMode) {
+        print('📡 PATCH request to: $url');
+      }
+
+      final response = await http.patch(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'status': 'cancelled',
+        }),
+      );
+
+      if (kDebugMode) {
+        print('📥 Response status: ${response.statusCode}');
+        print('📥 Response body: ${response.body}');
+      }
+
+      if (response.statusCode == 200) {
+        // Update alert status to cancelled locally and notify
+        _currentEmergencyAlert = _currentEmergencyAlert!.copyWith(
+          status: EmergencyStatus.cancelled,
+        );
+        _updateSOSButtonState(SOSButtonState.idle);
+        notifyListeners();
       
-      return true;
+        if (kDebugMode) {
+          print('✅ Emergency alert cancelled successfully: ${_currentEmergencyAlert!.id}');
+        }
+        
+        return true;
+      } else {
+        if (kDebugMode) {
+          print('❌ Failed to cancel alert: ${response.statusCode}');
+          print('   Response: ${response.body}');
+        }
+        return false;
+      }
       
     } catch (e) {
       if (kDebugMode) {
-        print('Error cancelling alert: $e');
+        print('❌ Error cancelling alert: $e');
       }
       _setError('Failed to cancel emergency alert');
       return false;
@@ -373,28 +534,80 @@ class EmergencyProvider extends ChangeNotifier {
   Future<bool> resolveEmergencyAlert() async {
     try {
       if (_currentEmergencyAlert == null) {
+        if (kDebugMode) {
+          print('❌ Cannot resolve: No current emergency alert');
+        }
         return false;
+      }
+      
+      if (kDebugMode) {
+        print('🔄 Attempting to resolve alert ID: ${_currentEmergencyAlert!.id}');
+        print('   Alert status: ${_currentEmergencyAlert!.status}');
       }
       
       _setLoading(true);
       
-      // Update alert status to resolved
-      _currentEmergencyAlert = _currentEmergencyAlert!.copyWith(
-        status: EmergencyStatus.resolved,
-      );
-      
-      // Send resolution to backend (mock)
-      await Future.delayed(const Duration(seconds: 1));
-      
-      if (kDebugMode) {
-        print('Emergency alert resolved: ${_currentEmergencyAlert!.id}');
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (kDebugMode) {
+          print('❌ User not authenticated');
+        }
+        return false;
       }
-      
-      return true;
+
+      final token = await user.getIdToken();
+      if (token == null) {
+        if (kDebugMode) {
+          print('❌ Failed to get authentication token');
+        }
+        return false;
+      }
+
+      final url = '${AppConfig.apiBaseUrl}/emergency/alerts/${_currentEmergencyAlert!.id}';
+      if (kDebugMode) {
+        print('📡 PATCH request to: $url');
+      }
+
+      final response = await http.patch(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'status': 'resolved',
+        }),
+      );
+
+      if (kDebugMode) {
+        print('📥 Response status: ${response.statusCode}');
+        print('📥 Response body: ${response.body}');
+      }
+
+      if (response.statusCode == 200) {
+        // Update alert status to resolved
+        _currentEmergencyAlert = _currentEmergencyAlert!.copyWith(
+          status: EmergencyStatus.resolved,
+        );
+        _updateSOSButtonState(SOSButtonState.idle);
+        notifyListeners();
+        
+        if (kDebugMode) {
+          print('✅ Emergency alert resolved successfully: ${_currentEmergencyAlert!.id}');
+        }
+        
+        return true;
+      } else {
+        if (kDebugMode) {
+          print('❌ Failed to resolve alert: ${response.statusCode}');
+          print('   Response: ${response.body}');
+        }
+        return false;
+      }
       
     } catch (e) {
       if (kDebugMode) {
-        print('Error resolving alert: $e');
+        print('❌ Error resolving alert: $e');
       }
       _setError('Failed to resolve emergency alert');
       return false;
@@ -406,70 +619,103 @@ class EmergencyProvider extends ChangeNotifier {
   /// Load nearby emergency alerts
   Future<void> loadNearbyAlerts() async {
     try {
-      if (_currentLocation == null) {
-        await updateLocation();
-      }
-      
-      if (_currentLocation == null) {
-        _setError('Location required to find nearby alerts');
+      _setLoading(true);
+      _setError(null); // Clear any previous errors
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (kDebugMode) {
+          print('❌ User not authenticated for nearby alerts');
+        }
+        _nearbyAlerts = [];
         return;
       }
-      
-      _setLoading(true);
-      
-      // Fetch nearby alerts from backend (mock implementation)
-      await Future.delayed(const Duration(seconds: 1));
-      
-      // Mock nearby alerts
-      _nearbyAlerts = [
-        // Would be populated from API response
-      ];
-      
+
+      final token = await user.getIdToken();
+      if (token == null) {
+        if (kDebugMode) {
+          print('❌ Failed to get authentication token for nearby alerts');
+        }
+        _nearbyAlerts = [];
+        return;
+      }
+
       if (kDebugMode) {
-        print('Loaded ${_nearbyAlerts.length} nearby alerts');
+        print('📡 Loading nearby alerts...');
+      }
+
+      final response = await http.get(
+        Uri.parse('${AppConfig.apiBaseUrl}/emergency/alerts?type=nearby'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (kDebugMode) {
+        print('📥 Nearby alerts response: ${response.statusCode}');
+      }
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final alertsList = data['alerts'] as List;
+        
+        _nearbyAlerts = alertsList.map((json) {
+          return EmergencyAlert(
+            id: json['id'],
+            userId: json['user_id'],
+            location: LocationData(
+              latitude: double.parse(json['latitude'].toString()),
+              longitude: double.parse(json['longitude'].toString()),
+              accuracy: 10.0,
+              timestamp: DateTime.now(),
+            ),
+            message: json['message'] ?? 'Emergency assistance needed',
+            timestamp: DateTime.parse(json['created_at']),
+            status: _parseStatus(json['status']),
+            userName: json['user_name'],
+            userEmail: json['email'],
+            userPhone: json['phone_number'],
+            userProfilePicUrl: json['profile_pic_url'],
+          );
+        }).toList();
+        
+        if (kDebugMode) {
+          print('✅ Loaded ${_nearbyAlerts.length} nearby alerts');
+        }
+      } else {
+        if (kDebugMode) {
+          print('❌ Failed to load nearby alerts: ${response.statusCode}');
+          print('   Response: ${response.body}');
+        }
+        // Keep existing alerts on error, don't clear them
+        if (kDebugMode) {
+          print('⚠️ Keeping ${_nearbyAlerts.length} cached alerts');
+        }
       }
       
     } catch (e) {
       if (kDebugMode) {
-        print('Error loading nearby alerts: $e');
+        print('❌ Error loading nearby alerts: $e');
+        print('⚠️ Keeping ${_nearbyAlerts.length} cached alerts');
       }
-      _setError('Failed to load nearby alerts');
+      // Don't clear alerts on error, just keep cached ones
     } finally {
       _setLoading(false);
     }
   }
-  
-  /// Respond to an emergency alert
-  Future<bool> respondToAlert(String alertId) async {
-    try {
-      _setLoading(true);
-      
-      // Send response to backend (mock)
-      await Future.delayed(const Duration(seconds: 1));
-      
-      // Update local alert responder count
-      final alertIndex = _nearbyAlerts.indexWhere((alert) => alert.id == alertId);
-      if (alertIndex != -1) {
-        _nearbyAlerts[alertIndex] = _nearbyAlerts[alertIndex].copyWith(
-          responderCount: _nearbyAlerts[alertIndex].responderCount + 1,
-        );
-        notifyListeners();
-      }
-      
-      if (kDebugMode) {
-        print('Responded to alert: $alertId');
-      }
-      
-      return true;
-      
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error responding to alert: $e');
-      }
-      _setError('Failed to respond to alert');
-      return false;
-    } finally {
-      _setLoading(false);
+
+  /// Parse status string to enum
+  EmergencyStatus _parseStatus(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'active':
+        return EmergencyStatus.active;
+      case 'resolved':
+        return EmergencyStatus.resolved;
+      case 'cancelled':
+        return EmergencyStatus.cancelled;
+      default:
+        return EmergencyStatus.active;
     }
   }
   

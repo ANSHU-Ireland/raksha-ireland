@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Raksha Ireland API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2196F3;
+            text-align: center;
+        }
+        .api-url {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 30px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+        }
+        .btn-health { background-color: #4CAF50; }
+        .btn-register { background-color: #2196F3; }
+        .btn-login { background-color: #FF9800; }
+        button:hover {opacity: 0.9;}
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .loading {
+            text-align: center;
+            color: #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚨 Raksha Ireland - Backend Test</h1>
+        <div class="api-url">API: https://chin-ungraspable-quentin.ngrok-free.dev/api</div>
+        
+        <input type="text" id="name" placeholder="Full Name" value="Test User">
+        <input type="email" id="email" placeholder="Email" value="test@example.com">
+        <input type="password" id="password" placeholder="Password (min 8 chars)" value="Test@123">
+        
+        <button class="btn-health" onclick="checkHealth()">✓ Check Backend Health</button>
+        <button class="btn-register" onclick="register()">📝 Register New User</button>
+        <button class="btn-login" onclick="login()">🔐 Login</button>
+        
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        const API_URL = 'https://chin-ungraspable-quentin.ngrok-free.dev/api';
+        
+        function showResult(message, isSuccess) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = 'result ' + (isSuccess ? 'success' : 'error');
+            resultDiv.innerHTML = message;
+            resultDiv.style.display = 'block';
+        }
+        
+        function showLoading() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = 'result loading';
+            resultDiv.innerHTML = '⏳ Loading...';
+            resultDiv.style.display = 'block';
+        }
+        
+        async function checkHealth() {
+            showLoading();
+            try {
+                const response = await fetch(`${API_URL}/../health`);
+                const data = await response.json();
+                if (response.ok) {
+                    showResult(`✅ Backend is alive!<br>
+                                Message: ${data.message}<br>
+                                Database: ${data.database}<br>
+                                Timestamp: ${data.timestamp}`, true);
+                } else {
+                    showResult('❌ Backend returned an error', false);
+                }
+            } catch (error) {
+                showResult(`❌ Cannot reach backend: ${error.message}`, false);
+            }
+        }
+        
+        async function register() {
+            showLoading();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const name = document.getElementById('name').value;
+            
+            try {
+                const response = await fetch(`${API_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        email,
+                        password,
+                        full_name: name,
+                        nationality: 'Irish',
+                        phone_number: '+353871234567'
+                    })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    showResult(`✅ Registration successful!<br>
+                                User ID: ${data.user.id}<br>
+                                Email: ${data.user.email}<br>
+                                Name: ${data.user.full_name}`, true);
+                } else {
+                    showResult(`❌ Registration failed: ${data.message || 'Unknown error'}`, false);
+                }
+            } catch (error) {
+                showResult(`❌ Network error: ${error.message}`, false);
+            }
+        }
+        
+        async function login() {
+            showLoading();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email, password})
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    showResult(`✅ Login successful!<br>
+                                User: ${data.user.email}<br>
+                                Token: ${data.token.substring(0, 30)}...<br>
+                                Refresh Token: ${data.refreshToken.substring(0, 30)}...`, true);
+                } else {
+                    showResult(`❌ Login failed: ${data.message || 'Unknown error'}`, false);
+                }
+            } catch (error) {
+                showResult(`❌ Network error: ${error.message}`, false);
+            }
+        }
+    </script>
+</body>
+</html>

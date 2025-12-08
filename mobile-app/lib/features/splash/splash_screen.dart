@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:home_widget/home_widget.dart';
 import '../auth/providers/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -67,6 +68,9 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   void _startSplashSequence() async {
+    // Check if widget triggered SOS
+    final widgetSOSTriggered = await HomeWidget.getWidgetData<bool>('widget_sos_triggered', defaultValue: false);
+    
     // Start main logo animation
     await _logoController.forward();
     
@@ -78,29 +82,93 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 1000));
     
     if (mounted) {
-      _checkAuthenticationState();
+      _checkAuthenticationState(widgetSOSTriggered ?? false);
     }
   }
 
-  void _checkAuthenticationState() {
+  void _checkAuthenticationState(bool widgetSOSTriggered) {
     final authProvider = context.read<AuthProvider>();
     
-    // Initialize auth state checking
-    authProvider.checkAuthState().then((_) {
-      if (mounted) {
-        // Navigate based on auth state
-        if (authProvider.isAuthenticated) {
-          if (authProvider.currentUser?.isVerified == true) {
-            // Navigate to home screen
-            Navigator.of(context).pushReplacementNamed('/home');
-          } else {
-            // Navigate to verification pending screen
-            Navigator.of(context).pushReplacementNamed('/verification-pending');
+    // Try auto-login first if credentials are saved
+    authProvider.authService.autoLogin().then((autoLoginUser) {
+      if (autoLoginUser != null && mounted) {
+        // Auto-login successful
+        authProvider.updateCurrentUser(autoLoginUser).then((_) {
+          if (mounted) {
+            if (widgetSOSTriggered) {
+              HomeWidget.saveWidgetData<bool>('widget_sos_triggered', false);
+            }
+            
+            // Navigate to home
+            if (widgetSOSTriggered) {
+              Navigator.of(context).pushReplacementNamed('/home');
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (mounted) Navigator.of(context).pushNamed('/emergency');
+              });
+            } else {
+              Navigator.of(context).pushReplacementNamed('/home');
+            }
           }
-        } else {
-          // Navigate to onboarding/auth flow
-          Navigator.of(context).pushReplacementNamed('/onboarding');
+        });
+        return;
+      }
+      
+      // No auto-login, check normal auth state
+      authProvider.checkAuthState().then((_) async {
+        if (mounted) {
+          // Navigate based on auth state
+          if (authProvider.isAuthenticated) {
+            if (authProvider.currentUser?.isVerified == true) {
+              // Clear the widget SOS flag
+              if (widgetSOSTriggered) {
+                await HomeWidget.saveWidgetData<bool>('widget_sos_triggered', false);
+              }
+              
+              // Navigate to home screen
+              if (widgetSOSTriggered) {
+                // Go directly to emergency screen if widget triggered
+                Navigator.of(context).pushReplacementNamed('/home');
+                await Future.delayed(const Duration(milliseconds: 500));
+                Navigator.of(context).pushNamed('/emergency');
+              } else {
+                Navigator.of(context).pushReplacementNamed('/home');
+              }
+            } else {
+              // Navigate to verification pending screen
+              Navigator.of(context).pushReplacementNamed('/verification-pending');
+            }
+          } else {
+            // Navigate to onboarding/auth flow
+            Navigator.of(context).pushReplacementNamed('/onboarding');
+          }
         }
+      });
+    }).catchError((error) {
+      // Auto-login failed, proceed with normal auth check
+      if (mounted) {
+        authProvider.checkAuthState().then((_) async {
+          if (mounted) {
+            if (authProvider.isAuthenticated) {
+              if (authProvider.currentUser?.isVerified == true) {
+                if (widgetSOSTriggered) {
+                  await HomeWidget.saveWidgetData<bool>('widget_sos_triggered', false);
+                }
+                
+                if (widgetSOSTriggered) {
+                  Navigator.of(context).pushReplacementNamed('/home');
+                  await Future.delayed(const Duration(milliseconds: 500));
+                  Navigator.of(context).pushNamed('/emergency');
+                } else {
+                  Navigator.of(context).pushReplacementNamed('/home');
+                }
+              } else {
+                Navigator.of(context).pushReplacementNamed('/verification-pending');
+              }
+            } else {
+              Navigator.of(context).pushReplacementNamed('/onboarding');
+            }
+          }
+        });
       }
     });
   }
@@ -206,7 +274,7 @@ class _SplashScreenState extends State<SplashScreen>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           // Supported by text
-                          const Text(
+                          Text(
                             'Supported by',
                             style: TextStyle(
                               fontFamily: AppTypography.inter,

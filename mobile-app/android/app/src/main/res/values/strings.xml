@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Raksha Ireland</string>
+    <string name="widget_description">Emergency SOS button - Hold for 3 seconds to trigger alert</string>
+    <string name="sos_widget_content_description">SOS emergency widget</string>
+    <string name="sos_label">SOS</string>
+    <string name="sos_hold_instruction">Hold 3s</string>
+</resources>

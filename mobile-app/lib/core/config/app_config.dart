@@ -1,8 +1,10 @@
 class AppConfig {
   // API Configuration
+  // Note: Using AWS EC2 public IP for cross-network access
+  // Backend deployed on EC2 instance in eu-west-1
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://backend-api-production-06de.up.railway.app/api',
+    defaultValue: 'http://3.254.75.134:3000/api',
   );
 
   // App Information

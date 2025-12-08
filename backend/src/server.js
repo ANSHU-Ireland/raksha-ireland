@@ -118,7 +118,8 @@ app.use('/setup', setupRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', authenticateToken, userRoutes);
 app.use('/api/emergency', authenticateToken, emergencyLimiter, emergencyRoutes);
-app.use('/api/admin', authenticateToken, adminRoutes);
+// Admin panel (protected by Basic Auth only)
+app.use('/api/admin', adminRoutes);
 
 // Welcome route
 app.get('/', (req, res) => {
@@ -127,6 +128,23 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     status: 'active',
     documentation: '/api/docs',
+    health: '/health'
+  });
+});
+
+// API root route
+app.get('/api', (req, res) => {
+  res.json({
+    message: 'Raksha Ireland API',
+    version: '1.0.0',
+    status: 'active',
+    documentation: '/api/docs',
+    endpoints: {
+      auth: '/api/auth',
+      users: '/api/users',
+      emergency: '/api/emergency',
+      admin: '/api/admin'
+    },
     health: '/health'
   });
 });
@@ -149,14 +167,18 @@ app.get('/api/docs', (req, res) => {
       users: {
         'GET /api/users/profile': 'Get user profile',
         'PUT /api/users/profile': 'Update user profile',
+        'PUT /api/users/fcm-token': 'Register FCM token for push notifications',
+        'PUT /api/users/location-settings': 'Enable/disable location tracking',
+        'PUT /api/users/location': 'Update user location',
         'POST /api/users/upload-documents': 'Upload verification documents',
         'DELETE /api/users/account': 'Delete user account'
       },
       emergency: {
-        'POST /api/emergency/trigger': 'Trigger emergency alert',
-        'GET /api/emergency/nearby': 'Get nearby emergency alerts',
-        'POST /api/emergency/respond': 'Respond to emergency alert',
-        'PUT /api/emergency/resolve': 'Resolve emergency alert'
+        'POST /api/emergency/alerts': 'Create emergency alert',
+        'GET /api/emergency/alerts': 'Get emergency alerts',
+        'GET /api/emergency/alerts/:id': 'Get specific alert',
+        'PUT /api/emergency/alerts/:id/respond': 'Respond to emergency',
+        'PUT /api/emergency/alerts/:id/cancel': 'Cancel alert'
       },
       admin: {
         'GET /api/admin/users': 'Get users for verification',

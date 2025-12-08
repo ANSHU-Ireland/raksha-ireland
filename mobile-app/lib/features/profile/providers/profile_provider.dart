@@ -1,5 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../../../core/services/auth_service.dart';
+import '../../../core/config/app_config.dart';
 
 /// State management for user profile features
 class ProfileProvider extends ChangeNotifier {
@@ -38,27 +42,74 @@ class ProfileProvider extends ChangeNotifier {
     String? fullName,
     String? nationality,
     String? phoneNumber,
+    String? profilePicUrl,
   }) async {
+    // Validate before starting loading state
+    if (currentUser == null) {
+      _setError('No user signed in');
+      return false;
+    }
+    
+    // Build request body
+    final Map<String, dynamic> body = {};
+    if (fullName != null && fullName.isNotEmpty) body['full_name'] = fullName;
+    if (nationality != null && nationality.isNotEmpty) body['nationality'] = nationality;
+    if (phoneNumber != null && phoneNumber.isNotEmpty) body['phone_number'] = phoneNumber;
+    if (profilePicUrl != null) body['profile_pic_url'] = profilePicUrl;
+    
+    if (body.isEmpty) {
+      _setError('No changes to save');
+      return false;
+    }
+    
     try {
       _setLoading(true);
       _setError(null);
       
-      if (currentUser == null) {
-        _setError('No user signed in');
+      // Get auth token
+      final token = await _authService.getIdToken();
+      if (token == null) {
+        _setError('Not authenticated');
         return false;
       }
       
-      // In a real app, this would make an API call to update the backend
-      await Future.delayed(const Duration(seconds: 1));
+      // Make API call with timeout
+      final response = await http.put(
+        Uri.parse('${AppConfig.apiBaseUrl}/users/profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(body),
+      ).timeout(const Duration(seconds: 15));
       
-      // For now, we'll just update locally
-      // This would be handled by the auth provider in a real implementation
-      
-      if (kDebugMode) {
-        print('Profile updated successfully');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        // Update auth service with new user data
+        if (data['user'] != null) {
+          final updatedUser = AppUser.fromJson(data['user']);
+          await _authService.updateCurrentUser(updatedUser);
+          // No need to call fetchUserProfile() - updateCurrentUser already syncs
+        }
+        
+        if (kDebugMode) {
+          print('Profile updated successfully');
+        }
+        
+        return true;
+      } else {
+        // Safe JSON decoding for error responses
+        String message;
+        try {
+          final error = json.decode(response.body);
+          message = error['error'] ?? 'Failed to update profile';
+        } catch (_) {
+          message = 'Failed to update profile (${response.statusCode})';
+        }
+        _setError(message);
+        return false;
       }
-      
-      return true;
       
     } catch (e) {
       if (kDebugMode) {
@@ -76,14 +127,15 @@ class ProfileProvider extends ChangeNotifier {
     required List<String> documentPaths,
     String? notes,
   }) async {
+    // Validate before starting loading state
+    if (currentUser == null) {
+      _setError('No user signed in');
+      return false;
+    }
+    
     try {
       _setLoading(true);
       _setError(null);
-      
-      if (currentUser == null) {
-        _setError('No user signed in');
-        return false;
-      }
       
       // In a real app, this would upload files to cloud storage and update backend
       await Future.delayed(const Duration(seconds: 3));
@@ -126,16 +178,16 @@ class ProfileProvider extends ChangeNotifier {
   }
   
   /// Get verification status color
-  String get verificationStatusColor {
+  Color get verificationStatusColor {
     switch (verificationStatus) {
       case VerificationStatus.pending:
-        return 'orange';
+        return Colors.orange;
       case VerificationStatus.verified:
-        return 'green';
+        return Colors.green;
       case VerificationStatus.rejected:
-        return 'red';
+        return Colors.red;
       case null:
-        return 'grey';
+        return Colors.grey;
     }
   }
   
@@ -167,14 +219,15 @@ class ProfileProvider extends ChangeNotifier {
   
   /// Export user data (GDPR compliance)
   Future<Map<String, dynamic>?> exportUserData() async {
+    // Validate before starting loading state
+    if (currentUser == null) {
+      _setError('No user signed in');
+      return null;
+    }
+    
     try {
       _setLoading(true);
       _setError(null);
-      
-      if (currentUser == null) {
-        _setError('No user signed in');
-        return null;
-      }
       
       // In a real app, this would fetch all user data from backend
       await Future.delayed(const Duration(seconds: 2));
@@ -206,14 +259,15 @@ class ProfileProvider extends ChangeNotifier {
   
   /// Request account deletion (GDPR compliance)
   Future<bool> requestAccountDeletion(String reason) async {
+    // Validate before starting loading state
+    if (currentUser == null) {
+      _setError('No user signed in');
+      return false;
+    }
+    
     try {
       _setLoading(true);
       _setError(null);
-      
-      if (currentUser == null) {
-        _setError('No user signed in');
-        return false;
-      }
       
       // In a real app, this would:
       // 1. Mark account for deletion in backend
@@ -240,14 +294,15 @@ class ProfileProvider extends ChangeNotifier {
   
   /// Get user statistics
   Future<Map<String, int>?> getUserStatistics() async {
+    // Validate before starting loading state
+    if (currentUser == null) {
+      _setError('No user signed in');
+      return null;
+    }
+    
     try {
       _setLoading(true);
       _setError(null);
-      
-      if (currentUser == null) {
-        _setError('No user signed in');
-        return null;
-      }
       
       // In a real app, this would fetch from backend analytics
       await Future.delayed(const Duration(seconds: 1));

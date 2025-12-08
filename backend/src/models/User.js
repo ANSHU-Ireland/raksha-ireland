@@ -33,9 +33,12 @@ class User {
       phone_number
     } = userData;
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const password_hash = await bcrypt.hash(password, salt);
+    // Hash password (skip if null for Firebase users)
+    let password_hash = null;
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      password_hash = await bcrypt.hash(password, salt);
+    }
 
     const user = {
       id: uuidv4(),

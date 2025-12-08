@@ -1,9 +1,10 @@
 const jwt = require('jsonwebtoken');
+const admin = require('../config/firebase'); // Use shared Firebase config
 const logger = require('../utils/logger');
 const User = require('../models/User');
 
 /**
- * Middleware to authenticate JWT tokens
+ * Middleware to authenticate JWT tokens (supports both Firebase and custom JWT)
  */
 const authenticateToken = async (req, res, next) => {
   try {
@@ -17,11 +18,86 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // Verify the token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Get user from database
-    const user = await User.findById(decoded.userId);
+    let userId;
+    let userEmail;
+
+    // Try Firebase token first
+    let decodedToken = null;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(token);
+      userEmail = decodedToken.email;
+      userId = decodedToken.uid;
+      
+      logger.info(`Firebase token verified for user: ${userEmail}`);
+    } catch (firebaseError) {
+      // If Firebase verification fails, try custom JWT
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        userId = decoded.userId;
+      } catch (jwtError) {
+        logger.error('Token verification failed:', firebaseError.message);
+        return res.status(401).json({
+          error: 'Invalid token',
+          code: 'INVALID_TOKEN'
+        });
+      }
+    }
+
+    // Get user from database by email or userId
+    let user;
+    if (userEmail) {
+      user = await User.findByEmail(userEmail);
+      
+      // Auto-create user if Firebase authenticated but not in DB
+      if (!user && decodedToken) {
+        logger.info(`Creating new user from Firebase auth: ${userEmail}`);
+        
+        // Get additional user info from Firebase
+        let firebaseUser = null;
+        try {
+          firebaseUser = await admin.auth().getUser(decodedToken.uid);
+        } catch (error) {
+          logger.warn(`Could not fetch Firebase user details: ${error.message}`);
+        }
+        
+        user = await User.create({
+          email: userEmail,
+          password: null, // No password for Firebase users
+          full_name: firebaseUser?.displayName || decodedToken.name || userEmail.split('@')[0],
+          phone_number: firebaseUser?.phoneNumber || null,
+          verification_status: 'verified' // Auto-verify Firebase users
+        });
+        logger.info(`User auto-created: ${user.id}`);
+      } else if (user && !user.full_name && decodedToken) {
+        // Update existing user with missing info from Firebase
+        logger.info(`Updating user with Firebase data: ${userEmail}`);
+        
+        let firebaseUser = null;
+        try {
+          firebaseUser = await admin.auth().getUser(decodedToken.uid);
+        } catch (error) {
+          logger.warn(`Could not fetch Firebase user details: ${error.message}`);
+        }
+        
+        const updates = {};
+        if (!user.full_name) {
+          updates.full_name = firebaseUser?.displayName || decodedToken.name || userEmail.split('@')[0];
+        }
+        if (!user.phone_number && firebaseUser?.phoneNumber) {
+          updates.phone_number = firebaseUser.phoneNumber;
+        }
+        if (user.verification_status === 'pending') {
+          updates.verification_status = 'verified';
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          user = await User.update(user.id, updates);
+          logger.info(`User updated: ${user.id}`);
+        }
+      }
+    } else if (userId) {
+      user = await User.findById(userId);
+    }
     
     if (!user) {
       return res.status(401).json({

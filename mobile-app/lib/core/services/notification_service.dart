@@ -1,6 +1,8 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import './navigation_service.dart';
 
 /// Service for handling push notifications and local notifications
 class NotificationService {
@@ -135,12 +137,34 @@ class NotificationService {
   /// Handle notification tap
   static void _onNotificationTapped(NotificationResponse response) {
     final payload = response.payload;
-    if (payload != null) {
-      // Parse payload and navigate accordingly
+    if (payload != null && payload.isNotEmpty) {
       if (kDebugMode) {
         print('Local notification tapped with payload: $payload');
       }
-      // TODO: Implement navigation logic based on payload
+      
+      try {
+        // Try to parse as JSON first
+        final Map<String, dynamic> data = jsonDecode(payload);
+        _handleNotificationTap(data);
+      } catch (e) {
+        // Fallback to string parsing if JSON fails
+        if (kDebugMode) {
+          print('JSON parse failed, using fallback: $e');
+        }
+        
+        if (payload.contains('emergency_alert')) {
+          String? alertId;
+          final alertIdMatch = RegExp(r'alert_id[:\s]*([a-zA-Z0-9-]+)').firstMatch(payload);
+          if (alertIdMatch != null) {
+            alertId = alertIdMatch.group(1);
+          }
+          _navigateToNearbyAlerts(alertId);
+        } else if (payload.contains('verification_status')) {
+          _navigateToProfile();
+        } else {
+          _navigateToHome();
+        }
+      }
     }
   }
   
@@ -148,16 +172,64 @@ class NotificationService {
   static void _handleNotificationTap(Map<String, dynamic> data) {
     final type = data['type'];
     
+    if (kDebugMode) {
+      print('Notification tapped. Type: $type, Data: $data');
+    }
+    
     switch (type) {
       case 'emergency_alert':
-        // Navigate to emergency details screen
+        // Navigate to nearby alerts screen with the specific alert ID
+        final alertId = data['alert_id'];
+        _navigateToNearbyAlerts(alertId);
         break;
       case 'verification_status':
         // Navigate to profile or verification screen
+        _navigateToProfile();
         break;
       default:
         // Navigate to home screen
+        _navigateToHome();
         break;
+    }
+  }
+
+  /// Navigate to nearby alerts screen
+  static void _navigateToNearbyAlerts(String? alertId) {
+    try {
+      final navService = NavigationService();
+      if (alertId != null) {
+        navService.navigateTo('/nearby-alerts', arguments: {'alertId': alertId});
+      } else {
+        navService.navigateTo('/nearby-alerts');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Navigation error: $e');
+      }
+    }
+  }
+
+  /// Navigate to profile screen
+  static void _navigateToProfile() {
+    try {
+      final navService = NavigationService();
+      navService.navigateTo('/profile');
+    } catch (e) {
+      if (kDebugMode) {
+        print('Navigation error: $e');
+      }
+    }
+  }
+
+  /// Navigate to home screen
+  static void _navigateToHome() {
+    try {
+      final navService = NavigationService();
+      navService.navigateTo('/home');
+    } catch (e) {
+      if (kDebugMode) {
+        print('Navigation error: $e');
+      }
     }
   }
   
@@ -192,7 +264,7 @@ class NotificationService {
       message.notification?.title ?? 'Emergency Alert!',
       message.notification?.body ?? 'Someone nearby needs help',
       details,
-      payload: message.data.toString(),
+      payload: jsonEncode(message.data), // Encode as JSON for proper parsing
     );
   }
   
