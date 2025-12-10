@@ -6,12 +6,16 @@ import {
   Pressable,
   Alert,
   StyleSheet,
-  SafeAreaView,
   Image,
+  Platform,
+  KeyboardAvoidingView,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { loginUser } from '../api/aws';
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen({ navigation, onLogin }) {
   const [credentials, setCredentials] = useState({
     email: '',
     password: '',
@@ -35,7 +39,11 @@ export default function LoginScreen({ navigation }) {
     try {
       const result = await loginUser(credentials);
       if (result.success) {
-        // Store user session and navigate to home
+        // Store user session
+        if (onLogin) {
+          await onLogin(result.user);
+        }
+        // Navigate to home
         navigation.replace('Home');
       } else {
         Alert.alert('Login Failed', result.message || 'Invalid credentials');
@@ -57,7 +65,12 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>RAKSHA Ireland</Text>
           <Text style={styles.subtitle}>Emergency Response Login</Text>
@@ -112,7 +125,9 @@ export default function LoginScreen({ navigation }) {
             Need help? Contact admin@rakshaireland.org
           </Text>
         </View>
-      </View>
+        </View>
+      </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -121,6 +136,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  keyboardView: {
+    flex: 1,
   },
   content: {
     flex: 1,

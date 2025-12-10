@@ -42,14 +42,14 @@ exports.handler = async (event) => {
       };
     }
 
-    const { email, adminToken } = body;
+    const { email: emailInput, userId, adminToken } = body;
     
-    if (!email) {
+    if (!emailInput && !userId) {
       return {
         statusCode: 400,
         headers,
         body: JSON.stringify({ 
-          error: 'Missing required field: email'
+          error: 'Missing required field: email or userId'
         })
       };
     }
@@ -58,13 +58,24 @@ exports.handler = async (event) => {
     // For now, we'll skip admin token validation
     // In production, verify adminToken JWT here
 
-    // Get user from database
-    const userResult = await dynamodb.get({
-      TableName: TABLE_NAME,
-      Key: { email: email.toLowerCase() }
-    }).promise();
+    // Get user from database (by email or userId)
+    let user;
+    if (emailInput) {
+      const userResult = await dynamodb.get({
+        TableName: TABLE_NAME,
+        Key: { email: emailInput.toLowerCase() }
+      }).promise();
+      user = userResult.Item;
+    } else {
+      const scanRes = await dynamodb.scan({
+        TableName: TABLE_NAME,
+        FilterExpression: 'userId = :uid',
+        ExpressionAttributeValues: { ':uid': userId }
+      }).promise();
+      user = (scanRes.Items || [])[0];
+    }
 
-    if (!userResult.Item) {
+    if (!user) {
       return {
         statusCode: 404,
         headers,
@@ -73,8 +84,6 @@ exports.handler = async (event) => {
         })
       };
     }
-
-    const user = userResult.Item;
 
     // Check if user is already approved
     if (user.status === 'approved' || user.status === 'activated') {
@@ -93,7 +102,7 @@ exports.handler = async (event) => {
     
     await dynamodb.update({
       TableName: TABLE_NAME,
-      Key: { email: email.toLowerCase() },
+      Key: { email: user.email.toLowerCase() },
       UpdateExpression: 'SET #status = :status, updatedAt = :timestamp, approvedAt = :timestamp',
       ExpressionAttributeNames: {
         '#status': 'status'

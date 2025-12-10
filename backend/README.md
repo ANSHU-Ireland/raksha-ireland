@@ -126,6 +126,23 @@ chmod +x deploy.sh
 .\deploy.ps1
 ```
 
+### 5b. Deploy via Serverless Framework (recommended)
+
+This repo includes `serverless.yml` for an end-to-end deploy (functions, HTTP API routes, and DynamoDB tables).
+
+```bash
+# Install Serverless CLI (if not already)
+npm i -g serverless
+
+# Deploy to AWS (defaults to eu-west-1, stage=dev)
+sls deploy --stage dev
+
+# Get the API base URL
+sls info --verbose
+```
+
+Environment variables can be provided via your shell (e.g. `export JWT_SECRET=...`) or AWS SSM/Secrets Manager. The `serverless.yml` sets sensible defaults for local development.
+
 ### 6. Create Lambda Functions (First Time)
 
 ```bash
@@ -163,7 +180,13 @@ Create routes for each Lambda function:
 - `POST /approve-user` → rakshaApproveUser
 - `GET /activate` → rakshaActivateUser
 - `POST /activate` → rakshaActivateUser
-- `POST /sos-alert` → rakshaSosTrigger
+ - `POST /sos` → rakshaSosTrigger
+ - `GET /profile` and `PUT /profile` → profile
+ - `POST /register-push-token` → registerPushToken
+ - `POST /update-location` → updateLocation
+ - `GET /nearby-users/{h3Index}` → nearbyUsers
+ - `GET /admin/users` → listUsers
+ - `POST /reject-user` → rejectUser
 
 ## API Endpoints
 

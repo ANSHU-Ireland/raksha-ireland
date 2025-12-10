@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk');
 const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcryptjs');
 
 // Initialize AWS services
 const dynamodb = new AWS.DynamoDB.DocumentClient();
@@ -42,7 +43,7 @@ exports.handler = async (event) => {
     }
 
     // Validate required fields
-    const { name, age, sex, county, email } = body;
+    const { name, age, sex, county, email, password } = body;
     
     if (!name || !age || !sex || !county || !email) {
       return {
@@ -51,6 +52,18 @@ exports.handler = async (event) => {
         body: JSON.stringify({ 
           error: 'Missing required fields',
           message: 'Please provide name, age, sex, county, and email'
+        })
+      };
+    }
+
+    // Validate password strength (basic)
+    if (!password || String(password).length < 8) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ 
+          error: 'Weak password',
+          message: 'Password must be at least 8 characters'
         })
       };
     }
@@ -101,6 +114,23 @@ exports.handler = async (event) => {
     const userId = uuidv4();
     const timestamp = new Date().toISOString();
     
+    // Hash password for temporary local verification (before Cognito)
+    let tempPasswordHash = null;
+    try {
+      const salt = await bcrypt.genSalt(10);
+      tempPasswordHash = await bcrypt.hash(String(password), salt);
+    } catch (hashErr) {
+      console.error('Password hash error:', hashErr);
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ 
+          error: 'Password processing failed',
+          message: 'Could not process password'
+        })
+      };
+    }
+    
     const userItem = {
       email: email.toLowerCase(),
       userId,
@@ -111,6 +141,7 @@ exports.handler = async (event) => {
       status: 'pending', // pending -> approved -> activated
       createdAt: timestamp,
       updatedAt: timestamp,
+      tempPasswordHash,
       // TTL for cleanup (optional: 30 days for pending users)
       ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
     };

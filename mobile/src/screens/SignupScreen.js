@@ -7,26 +7,22 @@ import {
   Alert,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
+  Platform,
+  KeyboardAvoidingView,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
 import { signupUser } from '../api/aws';
-
-const IRISH_COUNTIES = [
-  'Antrim', 'Armagh', 'Carlow', 'Cavan', 'Clare', 'Cork', 'Derry', 
-  'Donegal', 'Down', 'Dublin', 'Fermanagh', 'Galway', 'Kerry', 
-  'Kildare', 'Kilkenny', 'Laois', 'Leitrim', 'Limerick', 'Longford', 
-  'Louth', 'Mayo', 'Meath', 'Monaghan', 'Offaly', 'Roscommon', 
-  'Sligo', 'Tipperary', 'Tyrone', 'Waterford', 'Westmeath', 'Wexford', 'Wicklow'
-];
 
 export default function SignupScreen({ navigation }) {
   const [formData, setFormData] = useState({
     name: '',
-    age: '',
-    sex: '',
-    county: '',
+    phone: '',
     email: '',
+    password: '',
+    confirmPassword: '',
   });
   const [loading, setLoading] = useState(false);
 
@@ -39,23 +35,23 @@ export default function SignupScreen({ navigation }) {
 
   const validateForm = () => {
     if (!formData.name.trim()) {
-      Alert.alert('Error', 'Please enter your name');
+      Alert.alert('Error', 'Please enter your full name');
       return false;
     }
-    if (!formData.age || isNaN(formData.age) || parseInt(formData.age) < 18) {
-      Alert.alert('Error', 'Please enter a valid age (18+)');
-      return false;
-    }
-    if (!formData.sex) {
-      Alert.alert('Error', 'Please select your gender');
-      return false;
-    }
-    if (!formData.county) {
-      Alert.alert('Error', 'Please select your county');
+    if (!formData.phone || formData.phone.length < 7) {
+      Alert.alert('Error', 'Please enter a valid phone number');
       return false;
     }
     if (!formData.email.includes('@')) {
       Alert.alert('Error', 'Please enter a valid email address');
+      return false;
+    }
+    if (!formData.password || formData.password.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters');
+      return false;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
       return false;
     }
     return true;
@@ -82,7 +78,12 @@ export default function SignupScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Text style={styles.title}>RAKSHA Ireland</Text>
         <Text style={styles.subtitle}>Emergency Response Network</Text>
         
@@ -96,42 +97,14 @@ export default function SignupScreen({ navigation }) {
             autoCapitalize="words"
           />
 
-          <Text style={styles.label}>Age</Text>
+          <Text style={styles.label}>Phone Number</Text>
           <TextInput
             style={styles.input}
-            value={formData.age}
-            onChangeText={(value) => handleInputChange('age', value)}
-            placeholder="Enter your age"
-            keyboardType="numeric"
+            value={formData.phone}
+            onChangeText={(value) => handleInputChange('phone', value)}
+            placeholder="Enter your phone number"
+            keyboardType="phone-pad"
           />
-
-          <Text style={styles.label}>Gender</Text>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={formData.sex}
-              style={styles.picker}
-              onValueChange={(value) => handleInputChange('sex', value)}
-            >
-              <Picker.Item label="Select Gender" value="" />
-              <Picker.Item label="Male" value="male" />
-              <Picker.Item label="Female" value="female" />
-              <Picker.Item label="Other" value="other" />
-            </Picker>
-          </View>
-
-          <Text style={styles.label}>County</Text>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={formData.county}
-              style={styles.picker}
-              onValueChange={(value) => handleInputChange('county', value)}
-            >
-              <Picker.Item label="Select County" value="" />
-              {IRISH_COUNTIES.map(county => (
-                <Picker.Item key={county} label={county} value={county} />
-              ))}
-            </Picker>
-          </View>
 
           <Text style={styles.label}>Email</Text>
           <TextInput
@@ -140,6 +113,26 @@ export default function SignupScreen({ navigation }) {
             onChangeText={(value) => handleInputChange('email', value)}
             placeholder="Enter your email address"
             keyboardType="email-address"
+            autoCapitalize="none"
+          />
+
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.password}
+            onChangeText={(value) => handleInputChange('password', value)}
+            placeholder="Create a password"
+            secureTextEntry
+            autoCapitalize="none"
+          />
+
+          <Text style={styles.label}>Confirm Password</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.confirmPassword}
+            onChangeText={(value) => handleInputChange('confirmPassword', value)}
+            placeholder="Re-enter your password"
+            secureTextEntry
             autoCapitalize="none"
           />
 
@@ -160,7 +153,9 @@ export default function SignupScreen({ navigation }) {
             <Text style={styles.linkText}>Already registered? Login here</Text>
           </Pressable>
         </View>
-      </ScrollView>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -169,6 +164,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  keyboardView: {
+    flex: 1,
   },
   scrollContainer: {
     flexGrow: 1,

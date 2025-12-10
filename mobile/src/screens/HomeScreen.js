@@ -5,15 +5,18 @@ import {
   Pressable,
   Alert,
   StyleSheet,
-  SafeAreaView,
   Animated,
   Vibration,
   AppState,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
+import * as Haptics from 'expo-haptics';
 import { sendSOSAlert, registerPushToken } from '../api/aws';
 import { getH3Index } from '../utils/geo';
+import { startBackgroundLocationTracking, stopBackgroundLocationTracking } from '../services/locationTask';
 
 // Configure notifications
 Notifications.setNotificationHandler({
@@ -24,7 +27,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export default function HomeScreen({ navigation, user }) {
+export default function HomeScreen({ navigation, user, onLogout }) {
   const [location, setLocation] = useState(null);
   const [sosActive, setSOSActive] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
@@ -38,10 +41,31 @@ export default function HomeScreen({ navigation, user }) {
     setupLocation();
     setupNotifications();
     
+    // Set up notification response handler
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Notification tapped:', response);
+      
+      // Extract alert data from notification
+      const alertData = response.notification.request.content.data;
+      
+      if (alertData) {
+        // Navigate to AlertDetail screen with alert data
+        navigation.navigate('AlertDetail', { alert: alertData });
+      }
+    });
+    
+    // Start background location tracking
+    startBackgroundLocationTracking().then(result => {
+      console.log('Background tracking:', result.message);
+    });
+    
     return () => {
+      subscription.remove();
       if (holdTimerRef.current) {
         clearInterval(holdTimerRef.current);
       }
+      // Stop background tracking when component unmounts
+      stopBackgroundLocationTracking();
     };
   }, []);
 
@@ -71,14 +95,26 @@ export default function HomeScreen({ navigation, user }) {
     try {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Notification access is required for emergency alerts.');
+        console.log('Notification permission not granted');
         return;
       }
 
-      const token = (await Notifications.getExpoPushTokenAsync()).data;
-      await registerPushToken(token);
+      // Try to get push token, but don't fail if projectId is missing
+      try {
+        const tokenData = await Notifications.getExpoPushTokenAsync({
+          projectId: 'raksha-ireland-mobile-dev'
+        });
+        if (tokenData?.data) {
+          await registerPushToken(tokenData.data);
+          console.log('Push token registered successfully');
+        }
+      } catch (tokenError) {
+        console.log('Push token registration skipped (development mode):', tokenError.message);
+        // Continue without push token in development
+      }
     } catch (error) {
-      console.error('Notification setup error:', error);
+      console.log('Notification setup warning:', error.message);
+      // Don't throw - notifications are non-critical for testing
     }
   };
 
@@ -86,7 +122,13 @@ export default function HomeScreen({ navigation, user }) {
     if (sosActive) return;
 
     setHoldProgress(0);
-    Vibration.vibrate(100);
+    
+    // Use Haptics on iOS, Vibration on Android
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } else {
+      Vibration.vibrate(100);
+    }
 
     // Start progress animation
     Animated.timing(progressAnim, {
@@ -139,7 +181,13 @@ export default function HomeScreen({ navigation, user }) {
 
   const triggerSOS = async () => {
     setSOSActive(true);
-    Vibration.vibrate([200, 100, 200, 100, 200]);
+    
+    // Use Haptics on iOS, Vibration on Android
+    if (Platform.OS === 'ios') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else {
+      Vibration.vibrate([200, 100, 200, 100, 200]);
+    }
 
     try {
       if (!location) {
@@ -191,18 +239,45 @@ export default function HomeScreen({ navigation, user }) {
       'Are you sure you want to logout?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', onPress: () => navigation.replace('Login') }
+        { 
+          text: 'Logout', 
+          onPress: async () => {
+            if (onLogout) {
+              await onLogout();
+            }
+            navigation.replace('Login');
+          }
+        }
       ]
     );
+  };
+
+  const testNotification = () => {
+    // Navigate directly to alert history to see all alerts
+    navigation.navigate('AlertHistory');
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>RAKSHA Ireland</Text>
-        <Pressable style={styles.logoutButton} onPress={logout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </Pressable>
+        <View style={styles.headerButtons}>
+          <Pressable 
+            style={styles.profileButton} 
+            onPress={() => navigation.navigate('Profile')}
+          >
+            <Text style={styles.profileIcon}>👤</Text>
+          </Pressable>
+          <Pressable 
+            style={styles.testButton} 
+            onPress={testNotification}
+          >
+            <Text style={styles.testButtonText}>🔔</Text>
+          </Pressable>
+          <Pressable style={styles.logoutButton} onPress={logout}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.content}>
@@ -262,6 +337,14 @@ export default function HomeScreen({ navigation, user }) {
         </View>
 
         <View style={styles.footer}>
+          <Pressable 
+            style={styles.historyButton}
+            onPress={() => navigation.navigate('AlertHistory')}
+          >
+            <Text style={styles.historyIcon}>📋</Text>
+            <Text style={styles.historyButtonText}>View Alert History</Text>
+          </Pressable>
+
           <Text style={styles.footerText}>
             Emergency Services: 999 or 112
           </Text>
@@ -295,6 +378,35 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#d32f2f',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  profileButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#d32f2f',
+  },
+  profileIcon: {
+    fontSize: 20,
+  },
+  testButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ff9800',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  testButtonText: {
+    fontSize: 20,
   },
   logoutButton: {
     padding: 8,
@@ -386,6 +498,26 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 10,
     alignItems: 'center',
+  },
+  historyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#d32f2f',
+  },
+  historyIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  historyButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#d32f2f',
   },
   footerText: {
     fontSize: 18,

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { sendSOSAlertSupabase, getAlertHistorySupabase } from './supabaseApi';
 
 // API Configuration - will be updated with actual endpoints
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://your-api-gateway-url.amazonaws.com';
@@ -13,6 +14,8 @@ const api = axios.create({
 
 // Store auth token
 let authToken = null;
+let userEmail = null;
+const USE_SUPABASE = String(process.env.EXPO_PUBLIC_USE_SUPABASE).toLowerCase() === 'true';
 
 export const setAuthToken = (token) => {
   authToken = token;
@@ -23,17 +26,29 @@ export const setAuthToken = (token) => {
   }
 };
 
+export const setUserEmail = (email) => {
+  userEmail = email;
+  if (email) {
+    api.defaults.headers.common['x-user-email'] = email;
+  } else {
+    delete api.defaults.headers.common['x-user-email'];
+  }
+};
+
 // User Registration
 export const signupUser = async (userData) => {
   try {
     const response = await api.post('/signup', {
       name: userData.name,
-      age: parseInt(userData.age),
-      sex: userData.sex,
-      county: userData.county,
+      phone: userData.phone,
       email: userData.email,
+      password: userData.password,
       timestamp: new Date().toISOString(),
     });
+    
+    if (response.data.success) {
+      setUserEmail(userData.email);
+    }
     
     return response.data;
   } catch (error) {
@@ -52,6 +67,7 @@ export const loginUser = async (credentials) => {
     
     if (response.data.success && response.data.token) {
       setAuthToken(response.data.token);
+      setUserEmail(response.data.user?.email);
       return {
         success: true,
         user: response.data.user,
@@ -90,7 +106,10 @@ export const registerPushToken = async (pushToken) => {
 // Send SOS Alert
 export const sendSOSAlert = async (sosData) => {
   try {
-    const response = await api.post('/sos-alert', {
+    if (USE_SUPABASE) {
+      return await sendSOSAlertSupabase(sosData);
+    }
+    const response = await api.post('/sos', {
       ...sosData,
       timestamp: new Date().toISOString(),
     });
@@ -102,6 +121,20 @@ export const sendSOSAlert = async (sosData) => {
   }
 };
 
+// Get Alert History (supports Supabase when enabled)
+export const getAlertHistory = async () => {
+  try {
+    if (USE_SUPABASE) {
+      return await getAlertHistorySupabase();
+    }
+    const response = await api.get('/alert-history');
+    return response.data;
+  } catch (error) {
+    console.error('Alert History Error:', error.response?.data || error.message);
+    return { success: true, alerts: [] };
+  }
+};
+
 // Get User Profile
 export const getUserProfile = async () => {
   try {
@@ -110,6 +143,22 @@ export const getUserProfile = async () => {
   } catch (error) {
     console.error('Profile API Error:', error.response?.data || error.message);
     throw new Error(error.response?.data?.message || 'Failed to get profile');
+  }
+};
+
+// Update User Profile
+export const updateUserProfile = async (profileData) => {
+  try {
+    const response = await api.put('/profile', {
+      name: profileData.name,
+      phone: profileData.phone,
+      profileImage: profileData.profileImage,
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Profile Update Error:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || 'Failed to update profile');
   }
 };
 
