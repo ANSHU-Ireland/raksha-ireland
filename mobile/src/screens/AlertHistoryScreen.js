@@ -10,6 +10,7 @@ import {
   Platform,
   Linking,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -38,6 +39,17 @@ export default function AlertHistoryScreen({ navigation }) {
     }
   };
 
+  const extractLocation = (item) => {
+    const loc = item.location || item.coords || null;
+    const lat = loc?.latitude ?? loc?.lat ?? item.latitude ?? item.lat ?? null;
+    const lon = loc?.longitude ?? loc?.lng ?? loc?.long ?? item.longitude ?? item.lng ?? item.long ?? null;
+    if (lat == null || lon == null) return null;
+    const nLat = typeof lat === 'string' ? parseFloat(lat) : lat;
+    const nLon = typeof lon === 'string' ? parseFloat(lon) : lon;
+    if (!isFinite(nLat) || !isFinite(nLon)) return null;
+    return { latitude: nLat, longitude: nLon };
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadAlertHistory();
@@ -51,28 +63,7 @@ export default function AlertHistoryScreen({ navigation }) {
     }
   };
 
-  const handleCallPress = async (phoneNumber, name) => {
-    if (Platform.OS === 'ios') {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-
-    if (!phoneNumber) {
-      Alert.alert('Error', 'Phone number not available');
-      return;
-    }
-
-    Alert.alert(
-      `Call ${name}?`,
-      phoneNumber,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Call',
-          onPress: () => Linking.openURL(`tel:${phoneNumber}`)
-        }
-      ]
-    );
-  };
+  // Call action removed from Alert History
 
   const handleLocationPress = async (location, name) => {
     if (Platform.OS === 'ios') {
@@ -124,17 +115,42 @@ export default function AlertHistoryScreen({ navigation }) {
     });
   };
 
-  const renderAlertItem = ({ item }) => (
-    <View style={styles.alertCard}>
-      <View style={styles.alertHeader}>
-        <View style={styles.avatarSmall}>
-          <Text style={styles.avatarTextSmall}>
-            {item.name?.charAt(0).toUpperCase() || 'U'}
-          </Text>
-        </View>
+  const formatDate = (value) => {
+    try {
+      const d = typeof value === 'string' ? new Date(value) : value;
+      if (!d || isNaN(d.getTime())) return '';
+      return d.toLocaleString();
+    } catch {
+      return '';
+    }
+  };
+
+  const renderAlertItem = ({ item }) => {
+    // Debug log to check if profileImage exists
+    if (item.profileImage) {
+      console.log('[AlertHistory] Profile image URL:', item.profileImage, 'for user:', item.name);
+    }
+    
+    return (
+      <View style={styles.alertCard}>
+        <View style={styles.alertHeader}>
+          <View style={styles.avatarSmall}>
+            {item.profileImage ? (
+              <Image
+                source={{ uri: item.profileImage }}
+                style={styles.avatarImageSmall}
+                onError={(e) => console.log('[AlertHistory] Image load error:', e.nativeEvent.error)}
+                onLoad={() => console.log('[AlertHistory] Image loaded successfully for:', item.name)}
+              />
+            ) : (
+              <Text style={styles.avatarTextSmall}>
+                {item.name?.charAt(0).toUpperCase() || 'U'}
+              </Text>
+            )}
+          </View>
         <View style={styles.alertInfo}>
           <Text style={styles.alertName}>{item.name || 'Unknown User'}</Text>
-          <Text style={styles.alertTime}>{getTimeAgo(item.timestamp)}</Text>
+          <Text style={styles.alertTime}>{getTimeAgo(item.timestamp)}{item.created_at ? ` • ${formatDate(item.created_at)}` : ''}</Text>
         </View>
         <View style={styles.statusBadgeSmall}>
           <Text style={styles.emergencyIconSmall}>🚨</Text>
@@ -142,37 +158,38 @@ export default function AlertHistoryScreen({ navigation }) {
       </View>
 
       <View style={styles.alertDetails}>
-        <Pressable 
-          style={styles.detailRowPressable}
-          onPress={() => handleCallPress(item.phone, item.name)}
-        >
+        <View style={styles.detailRowCompact}>
           <Text style={styles.detailIcon}>📞</Text>
-          <View style={styles.detailContent}>
-            <Text style={styles.detailLabel}>PHONE NUMBER</Text>
-            <Text style={styles.detailText}>{item.phone || 'No phone'}</Text>
+          <View style={styles.detailContentCompact}>
+            <Text style={styles.detailLabelCompact}>PHONE</Text>
+            <Text style={styles.detailTextCompact} numberOfLines={1} ellipsizeMode="tail">
+              {item.phone || 'No phone'}
+            </Text>
           </View>
-          <Text style={styles.actionIcon}>›</Text>
-        </Pressable>
+          {/* Action buttons removed on history screen */}
+        </View>
 
-        {item.location && (
+        {extractLocation(item) && (
           <Pressable 
             style={styles.detailRowPressable}
-            onPress={() => handleLocationPress(item.location, item.name)}
+            onPress={() => handleLocationPress(extractLocation(item), item.name)}
           >
             <Text style={styles.detailIcon}>📍</Text>
             <View style={styles.detailContent}>
               <Text style={styles.detailLabel}>LOCATION</Text>
               <Text style={styles.detailText}>
-                {item.location.latitude?.toFixed(4)}, {item.location.longitude?.toFixed(4)}
+                {extractLocation(item).latitude.toFixed(4)}, {extractLocation(item).longitude.toFixed(4)}
               </Text>
               <Text style={styles.tapHint}>Tap to open in Maps</Text>
             </View>
             <Text style={styles.actionIcon}>›</Text>
           </Pressable>
         )}
+        {/* Secondary Directions button removed for cleaner UI */}
       </View>
     </View>
-  );
+    );
+  };
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
@@ -200,14 +217,16 @@ export default function AlertHistoryScreen({ navigation }) {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Alert History</Text>
         <Text style={styles.headerSubtitle}>
-          {alerts.length} {alerts.length === 1 ? 'alert' : 'alerts'} received
+          {alerts.length > 0 
+            ? `${alerts.length} ${alerts.length === 1 ? 'alert' : 'alerts'} received (last hour)` 
+            : 'No alerts in the last hour'}
         </Text>
       </View>
 
       <FlatList
         data={alerts}
         renderItem={renderAlertItem}
-        keyExtractor={(item) => item.alertId || item.timestamp}
+        keyExtractor={(item, index) => String(item.id ?? item.alertId ?? item.timestamp ?? index)}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={renderEmptyState}
         refreshControl={
@@ -290,6 +309,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    overflow: 'hidden',
+  },
+  avatarImageSmall: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   avatarTextSmall: {
     fontSize: 20,
@@ -323,6 +348,15 @@ const styles = StyleSheet.create({
   alertDetails: {
     paddingTop: 8,
   },
+  detailRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: '#f8f8f8',
+    marginBottom: 8,
+  },
   detailRowPressable: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -345,8 +379,20 @@ const styles = StyleSheet.create({
   detailContent: {
     flex: 1,
   },
+  detailContentCompact: {
+    flex: 1,
+    marginRight: 8,
+  },
   detailLabel: {
     fontSize: 10,
+    color: '#999',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    fontWeight: '600',
+  },
+  detailLabelCompact: {
+    fontSize: 9,
     color: '#999',
     marginBottom: 2,
     textTransform: 'uppercase',
@@ -358,15 +404,63 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: '500',
   },
+  detailTextCompact: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
   actionIcon: {
     fontSize: 24,
     color: '#d32f2f',
     marginLeft: 8,
   },
+  rightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  iconAction: {
+    backgroundColor: '#d32f2f',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 6,
+  },
+  iconEmoji: {
+    fontSize: 16,
+    color: '#fff',
+  },
   tapHint: {
     fontSize: 11,
     color: '#d32f2f',
     marginTop: 2,
+    fontWeight: '600',
+  },
+  directionsButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#d32f2f',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  directionsText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  inlineDirectionsButton: {
+    backgroundColor: '#d32f2f',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  inlineDirectionsText: {
+    color: '#fff',
+    fontSize: 12,
     fontWeight: '600',
   },
   alertFooter: {

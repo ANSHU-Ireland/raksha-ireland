@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,10 @@ import {
   TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Device from 'expo-device';
 import { loginUser } from '../api/aws';
+import { ensureSupabaseUserId } from '../api/supabaseApi';
 
 export default function LoginScreen({ navigation, onLogin }) {
   const [credentials, setCredentials] = useState({
@@ -21,6 +24,24 @@ export default function LoginScreen({ navigation, onLogin }) {
     password: '',
   });
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+
+  useEffect(() => {
+    loadSavedCredentials();
+  }, []);
+
+  const loadSavedCredentials = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('rememberedCredentials');
+      if (saved) {
+        const { email, password } = JSON.parse(saved);
+        setCredentials({ email, password });
+        setRememberMe(true);
+      }
+    } catch (error) {
+      console.error('Failed to load saved credentials:', error);
+    }
+  };
 
   const handleInputChange = (field, value) => {
     setCredentials(prev => ({
@@ -37,11 +58,36 @@ export default function LoginScreen({ navigation, onLogin }) {
 
     setLoading(true);
     try {
-      const result = await loginUser(credentials);
+      // Get unique device identifier (with fallback)
+      let deviceId = null;
+      try {
+        deviceId = await Device.getDeviceIdAsync();
+        console.log('[Login] Device ID:', deviceId);
+      } catch (deviceError) {
+        console.warn('[Login] Failed to get device ID:', deviceError);
+        // Continue without device ID - single device enforcement will be skipped
+      }
+      
+      const result = await loginUser({ ...credentials, deviceId });
       if (result.success) {
+        // Save credentials if Remember Me is checked
+        if (rememberMe) {
+          await AsyncStorage.setItem('rememberedCredentials', JSON.stringify(credentials));
+        } else {
+          await AsyncStorage.removeItem('rememberedCredentials');
+        }
+        
+        // Fetch Supabase user UUID and attach to user object
+        const supabaseUserId = await ensureSupabaseUserId(result.user);
+        const userWithSupabaseId = {
+          ...result.user,
+          supabaseUserId,
+        };
+        console.log('[Login] Supabase user ID obtained:', supabaseUserId);
+        
         // Store user session
         if (onLogin) {
-          await onLogin(result.user);
+          await onLogin(userWithSupabaseId);
         }
         // Navigate to home
         navigation.replace('Home');
@@ -49,10 +95,24 @@ export default function LoginScreen({ navigation, onLogin }) {
         Alert.alert('Login Failed', result.message || 'Invalid credentials');
       }
     } catch (error) {
-      if (error.message.includes('not approved')) {
+      const msg = (error?.message || '').toLowerCase();
+      if (msg.includes('pending') || msg.includes('under process') || msg.includes('verification')) {
         Alert.alert(
-          'Account Pending',
-          'Your account is still pending approval. Please wait for admin approval and activation email.'
+          'Under Verification',
+          'This email is under process of verification. Please wait for admin approval.'
+        );
+      } else if (msg.includes('approved') || msg.includes('activation')) {
+        Alert.alert(
+          'Activation Required',
+          'Your account is approved but not activated. Please check your email for the activation link.'
+        );
+      } else if (msg.includes('already logged in') || msg.includes('another device')) {
+        Alert.alert(
+          'Device Limit Reached',
+          'This account is already logged in on another device. Please log out from the other device first.',
+          [
+            { text: 'OK', style: 'cancel' }
+          ]
         );
       } else {
         Alert.alert('Error', 'Login failed. Please check your credentials.');
@@ -97,6 +157,16 @@ export default function LoginScreen({ navigation, onLogin }) {
             secureTextEntry
             autoCapitalize="none"
           />
+
+          <Pressable
+            style={styles.rememberMeContainer}
+            onPress={() => setRememberMe(!rememberMe)}
+          >
+            <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+              {rememberMe && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={styles.rememberMeText}>Remember Me</Text>
+          </Pressable>
 
           <Pressable
             style={[styles.loginButton, loading && styles.buttonDisabled]}
@@ -222,5 +292,32 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 14,
     textAlign: 'center',
+  },
+  rememberMeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: '#d32f2f',
+    borderRadius: 5,
+    marginRight: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#d32f2f',
+  },
+  checkmark: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  rememberMeText: {
+    fontSize: 16,
+    color: '#333',
   },
 });

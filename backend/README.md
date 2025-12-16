@@ -212,6 +212,35 @@ Content-Type: application/json
 ### User Login
 ```
 POST /login
+## Lambda Provisioning
+
+If `backend/deploy.sh` warns that functions do not exist, create them first:
+
+1. Ensure you have an IAM role for Lambda execution with permissions for CloudWatch Logs, DynamoDB, and (optionally) SES.
+2. Export required environment variables and create Lambdas:
+
+```bash
+cd backend
+export ROLE_ARN=arn:aws:iam::<account-id>:role/<lambda-execution-role>
+export REGION=eu-west-1
+export USERS_TABLE=Users
+export SENDER_EMAIL=admin@rakshaireland.org
+export FRONTEND_URL=https://your-domain.com
+# Optional if using Cognito for auth
+export COGNITO_USER_POOL_ID=<pool-id>
+export COGNITO_CLIENT_ID=<client-id>
+
+bash scripts/create-lambdas.sh
+```
+
+3. Update code on existing functions any time with:
+
+```bash
+bash deploy.sh
+```
+
+Note: Function names follow `raksha` + capitalized file name, e.g., `signup.js` -> `rakshaSignup`, `approveUser.js` -> `rakshaApproveUser`.
+
 Content-Type: application/json
 
 {

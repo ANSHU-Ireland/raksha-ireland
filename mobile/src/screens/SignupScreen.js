@@ -11,10 +11,12 @@ import {
   KeyboardAvoidingView,
   Keyboard,
   TouchableWithoutFeedback,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Picker } from '@react-native-picker/picker';
 import { signupUser } from '../api/aws';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 
 export default function SignupScreen({ navigation }) {
   const [formData, setFormData] = useState({
@@ -23,8 +25,13 @@ export default function SignupScreen({ navigation }) {
     email: '',
     password: '',
     confirmPassword: '',
+    profileImage: '',
+    idDocument: null,
   });
   const [loading, setLoading] = useState(false);
+  const [imagePickerVisible, setImagePickerVisible] = useState(false);
+  const [documentPickerVisible, setDocumentPickerVisible] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -54,6 +61,19 @@ export default function SignupScreen({ navigation }) {
       Alert.alert('Error', 'Passwords do not match');
       return false;
     }
+    if (!formData.profileImage?.trim()) {
+      Alert.alert('Error', 'Please add a profile photo');
+      return false;
+    }
+    if (!formData.idDocument) {
+      Alert.alert('Error', 'Please upload a proof of identification document');
+      return false;
+    }
+    // Validate document size (max 10MB - industry standard)
+    if (formData.idDocument.size > 10 * 1024 * 1024) {
+      Alert.alert('Error', 'Document size must be less than 10MB');
+      return false;
+    }
     return true;
   };
 
@@ -76,6 +96,154 @@ export default function SignupScreen({ navigation }) {
     }
   };
 
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Camera access is needed to take a photo.');
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setFormData(prev => ({ ...prev, profileImage: result.assets[0].uri }));
+        setImagePickerVisible(false);
+        setAvatarError(false);
+      }
+    } catch (error) {
+      console.error('Camera error:', error);
+      Alert.alert('Error', 'Failed to take photo');
+    }
+  };
+
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Photos access is needed to choose an image.');
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setFormData(prev => ({ ...prev, profileImage: result.assets[0].uri }));
+        setImagePickerVisible(false);
+        setAvatarError(false);
+      }
+    } catch (error) {
+      console.error('Image picker error:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const pickDocumentFromFiles = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const doc = result.assets[0];
+        
+        // Check file size (10MB limit - industry standard)
+        if (doc.size > 10 * 1024 * 1024) {
+          Alert.alert('File Too Large', 'Document size must be less than 10MB');
+          return;
+        }
+        
+        setFormData(prev => ({ ...prev, idDocument: doc }));
+        setDocumentPickerVisible(false);
+      }
+    } catch (error) {
+      console.error('Document picker error:', error);
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const takeDocumentPhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Camera access is needed to take a photo.');
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const photo = result.assets[0];
+        
+        // Convert to document format
+        const doc = {
+          uri: photo.uri,
+          name: `id-document-${Date.now()}.jpg`,
+          size: photo.fileSize || 0,
+          mimeType: 'image/jpeg',
+        };
+        
+        if (doc.size > 10 * 1024 * 1024) {
+          Alert.alert('File Too Large', 'Photo size must be less than 10MB');
+          return;
+        }
+        
+        setFormData(prev => ({ ...prev, idDocument: doc }));
+        setDocumentPickerVisible(false);
+      }
+    } catch (error) {
+      console.error('Camera error:', error);
+      Alert.alert('Error', 'Failed to take photo');
+    }
+  };
+
+  const pickDocumentFromGallery = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Photos access is needed to choose an image.');
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const photo = result.assets[0];
+        
+        // Convert to document format
+        const doc = {
+          uri: photo.uri,
+          name: `id-document-${Date.now()}.jpg`,
+          size: photo.fileSize || 0,
+          mimeType: 'image/jpeg',
+        };
+        
+        if (doc.size > 10 * 1024 * 1024) {
+          Alert.alert('File Too Large', 'Photo size must be less than 10MB');
+          return;
+        }
+        
+        setFormData(prev => ({ ...prev, idDocument: doc }));
+        setDocumentPickerVisible(false);
+      }
+    } catch (error) {
+      console.error('Gallery picker error:', error);
+      Alert.alert('Error', 'Failed to pick photo');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView 
@@ -88,6 +256,40 @@ export default function SignupScreen({ navigation }) {
         <Text style={styles.subtitle}>Emergency Response Network</Text>
         
         <View style={styles.form}>
+              {/* Avatar Picker */}
+              <View style={styles.signupAvatarContainer}>
+                <Pressable onPress={() => setImagePickerVisible(true)}>
+                  <View style={styles.signupAvatar}>
+                    {formData.profileImage && !avatarError ? (
+                      <Image
+                        source={{ uri: formData.profileImage }}
+                        style={styles.signupAvatarImage}
+                        onError={() => setAvatarError(true)}
+                      />
+                    ) : (
+                      <Text style={styles.signupAvatarText}>
+                        {formData.name?.charAt(0).toUpperCase() || 'U'}
+                      </Text>
+                    )}
+                    <View style={styles.cameraIconContainer}>
+                      <Text style={styles.cameraIcon}>📷</Text>
+                    </View>
+                  </View>
+                </Pressable>
+                {imagePickerVisible && (
+                  <View style={styles.pickerSheet}>
+                    <Pressable style={styles.pickerOption} onPress={takePhoto}>
+                      <Text style={styles.pickerOptionText}>Take Photo</Text>
+                    </Pressable>
+                    <Pressable style={styles.pickerOption} onPress={pickImage}>
+                      <Text style={styles.pickerOptionText}>Choose from Library</Text>
+                    </Pressable>
+                    <Pressable style={styles.pickerCancel} onPress={() => setImagePickerVisible(false)}>
+                      <Text style={styles.pickerCancelText}>Cancel</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
           <Text style={styles.label}>Full Name</Text>
           <TextInput
             style={styles.input}
@@ -105,6 +307,7 @@ export default function SignupScreen({ navigation }) {
             placeholder="Enter your phone number"
             keyboardType="phone-pad"
           />
+
 
           <Text style={styles.label}>Email</Text>
           <TextInput
@@ -135,6 +338,45 @@ export default function SignupScreen({ navigation }) {
             secureTextEntry
             autoCapitalize="none"
           />
+
+          <Text style={styles.label}>Proof of Identification *</Text>
+          <Text style={styles.helperText}>Upload a government-issued ID (Driver's License, Passport, etc.)</Text>
+          <Pressable
+            style={styles.documentPicker}
+            onPress={() => setDocumentPickerVisible(true)}
+          >
+            <Text style={styles.documentPickerIcon}>📄</Text>
+            <View style={styles.documentPickerContent}>
+              <Text style={styles.documentPickerText}>
+                {formData.idDocument ? formData.idDocument.name : 'Choose Document'}
+              </Text>
+              {formData.idDocument && (
+                <Text style={styles.documentPickerSize}>
+                  {(formData.idDocument.size / 1024).toFixed(2)} KB
+                </Text>
+              )}
+            </View>
+            <Text style={styles.documentPickerArrow}>›</Text>
+          </Pressable>
+          {documentPickerVisible && (
+            <View style={styles.pickerSheet}>
+              <Pressable style={styles.pickerOption} onPress={takeDocumentPhoto}>
+                <Text style={styles.pickerOptionText}>📷 Take Photo</Text>
+              </Pressable>
+              <Pressable style={styles.pickerOption} onPress={pickDocumentFromGallery}>
+                <Text style={styles.pickerOptionText}>🖼️ Choose from Gallery</Text>
+              </Pressable>
+              <Pressable style={styles.pickerOption} onPress={pickDocumentFromFiles}>
+                <Text style={styles.pickerOptionText}>📁 Browse Files</Text>
+              </Pressable>
+              <Pressable style={styles.pickerCancel} onPress={() => setDocumentPickerVisible(false)}>
+                <Text style={styles.pickerCancelText}>Cancel</Text>
+              </Pressable>
+            </View>
+          )}
+          {formData.idDocument && (
+            <Text style={styles.documentSuccess}>✓ Document uploaded successfully</Text>
+          )}
 
           <Pressable
             style={[styles.button, loading && styles.buttonDisabled]}
@@ -196,6 +438,70 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  signupAvatarContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  signupAvatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#d32f2f',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  signupAvatarImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+  },
+  signupAvatarText: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  cameraIconContainer: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  cameraIcon: {
+    fontSize: 14,
+  },
+  pickerSheet: {
+    marginTop: 12,
+    width: '100%',
+    backgroundColor: '#fafafa',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#eee',
+    overflow: 'hidden',
+  },
+  pickerOption: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  pickerOptionText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  pickerCancel: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  pickerCancelText: {
+    fontSize: 16,
+    color: '#d32f2f',
+    fontWeight: '600',
+  },
   label: {
     fontSize: 16,
     fontWeight: '600',
@@ -243,5 +549,46 @@ const styles = StyleSheet.create({
   linkText: {
     color: '#d32f2f',
     fontSize: 16,
+  },
+  helperText: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+  documentPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#fafafa',
+    marginBottom: 8,
+  },
+  documentPickerIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  documentPickerContent: {
+    flex: 1,
+  },
+  documentPickerText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  documentPickerSize: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  documentPickerArrow: {
+    fontSize: 24,
+    color: '#999',
+  },
+  documentSuccess: {
+    fontSize: 14,
+    color: '#4caf50',
+    marginBottom: 20,
   },
 });

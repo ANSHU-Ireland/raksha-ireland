@@ -7,6 +7,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "scheme": "raksha",
     "extra": {
       "eas": {
         "projectId": "raksha-ireland-mobile-dev"
@@ -38,6 +39,7 @@
     "android": {
       "package": "org.rakshaireland.mobile",
       "versionCode": 1,
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"

@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getUserProfile, updateUserProfile } from '../api/aws';
+import { supabase } from '../lib/supabaseClient';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -54,13 +55,35 @@ export default function ProfileScreen({ navigation, user, onLogout }) {
       const profileData = await getUserProfile();
       console.log('ProfileScreen - API response:', profileData);
       if (profileData.success && profileData.user) {
-        // Merge API data with existing user data
+        // Merge API data with existing user data (safe spread)
         const mergedProfile = {
-          ...user,
-          ...profileData.user
+          ...(profile || {}),
+          ...(profileData.user || {})
         };
         console.log('ProfileScreen - Merged profile:', mergedProfile);
+        console.log('ProfileScreen - Profile image URL:', mergedProfile.profileImage);
+        // Fallback to Supabase if API did not return a profile image
+        try {
+          if (!mergedProfile.profileImage && mergedProfile.email) {
+            const { data: sbUser, error: sbErr } = await supabase
+              .from('users')
+              .select('profile_image')
+              .eq('email', mergedProfile.email)
+              .maybeSingle();
+            if (!sbErr && sbUser?.profile_image) {
+              mergedProfile.profileImage = sbUser.profile_image;
+              console.log('ProfileScreen - Filled profileImage from Supabase:', mergedProfile.profileImage);
+            } else if (sbErr) {
+              console.warn('ProfileScreen - Supabase profile fetch error:', sbErr.message);
+            }
+          }
+        } catch (sbCatch) {
+          console.warn('ProfileScreen - Supabase fallback failed:', sbCatch.message);
+        }
         setProfile(mergedProfile);
+        
+        // Update AsyncStorage with latest profile data
+        await AsyncStorage.setItem('user', JSON.stringify(mergedProfile));
       }
     } catch (error) {
       console.error('Failed to load profile:', error);
@@ -86,10 +109,15 @@ export default function ProfileScreen({ navigation, user, onLogout }) {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
-            if (onLogout) {
-              await onLogout();
+            try {
+              if (onLogout) {
+                await onLogout();
+              }
+            } catch (error) {
+              console.error('Logout error:', error);
+            } finally {
+              navigation.replace('Login');
             }
-            navigation.replace('Login');
           }
         }
       ]
@@ -140,9 +168,6 @@ export default function ProfileScreen({ navigation, user, onLogout }) {
         
         Alert.alert('Success', 'Profile updated successfully!');
         closeEditModal();
-        
-        // Refresh profile data
-        await loadProfile();
       } else {
         Alert.alert('Error', 'Failed to update profile');
       }
@@ -185,7 +210,7 @@ export default function ProfileScreen({ navigation, user, onLogout }) {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setEditForm({ ...editForm, profileImage: result.assets[0].uri });
+        setEditForm(prev => ({ ...prev, profileImage: result.assets[0].uri }));
         setImagePickerVisible(false);
       }
     } catch (error) {
@@ -207,7 +232,7 @@ export default function ProfileScreen({ navigation, user, onLogout }) {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setEditForm({ ...editForm, profileImage: result.assets[0].uri });
+        setEditForm(prev => ({ ...prev, profileImage: result.assets[0].uri }));
         setImagePickerVisible(false);
       }
     } catch (error) {
@@ -238,7 +263,8 @@ export default function ProfileScreen({ navigation, user, onLogout }) {
     name: displayProfile.name,
     email: displayProfile.email,
     phone: displayProfile.phone,
-    userId: displayProfile.userId
+    userId: displayProfile.userId,
+    profileImage: displayProfile.profileImage
   });
 
   return (
@@ -261,24 +287,19 @@ export default function ProfileScreen({ navigation, user, onLogout }) {
           </Pressable>
           
           <View style={styles.avatarContainer}>
-            <Pressable onPress={openImagePicker}>
-              <View style={styles.avatar}>
-                {profile?.profileImage && !avatarError ? (
-                  <Image 
-                    source={{ uri: profile.profileImage }} 
-                    style={styles.avatarImage}
-                    onError={() => setAvatarError(true)}
-                  />
-                ) : (
-                  <Text style={styles.avatarText}>
-                    {displayProfile.name?.charAt(0).toUpperCase() || 'U'}
-                  </Text>
-                )}
-                <View style={styles.cameraIconContainer}>
-                  <Text style={styles.cameraIcon}>📷</Text>
-                </View>
-              </View>
-            </Pressable>
+            <View style={styles.avatar}>
+              {displayProfile.profileImage && !avatarError ? (
+                <Image 
+                  source={{ uri: displayProfile.profileImage }} 
+                  style={styles.avatarImage}
+                  onError={() => setAvatarError(true)}
+                />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {displayProfile.name?.charAt(0).toUpperCase() || 'U'}
+                </Text>
+              )}
+            </View>
           </View>
           <Text style={styles.userName}>{displayProfile.name || 'User'}</Text>
           <View style={styles.statusBadge}>
@@ -366,13 +387,17 @@ export default function ProfileScreen({ navigation, user, onLogout }) {
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Member Since</Text>
                 <Text style={styles.infoValue}>
-                  {displayProfile.createdAt || displayProfile.joinedAt ? 
-                    new Date(displayProfile.createdAt || displayProfile.joinedAt).toLocaleDateString('en-IE', {
+                  {(() => {
+                    const dateValue = displayProfile.createdAt || displayProfile.joinedAt;
+                    if (!dateValue) return 'Not available';
+                    const d = new Date(dateValue);
+                    if (isNaN(d.getTime())) return 'Not available';
+                    return d.toLocaleDateString('en-IE', {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric'
-                    }) : 
-                    'Not available'}
+                    });
+                  })()}
                 </Text>
               </View>
             </View>

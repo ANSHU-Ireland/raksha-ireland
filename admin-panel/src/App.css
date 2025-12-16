@@ -247,6 +247,33 @@ td {
   font-style: italic;
 }
 
+.user-document {
+  text-align: center;
+}
+
+.document-link {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.document-link:hover {
+  background-color: #f0f0f0;
+  color: #764ba2;
+}
+
+.no-document {
+  color: #999;
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
 @media (max-width: 768px) {
   .app-header h1 {
     font-size: 1.8rem;

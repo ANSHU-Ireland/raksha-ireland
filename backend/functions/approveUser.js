@@ -5,7 +5,7 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 const ses = new AWS.SES();
 
 const TABLE_NAME = process.env.USERS_TABLE || 'Users';
-const SENDER_EMAIL = process.env.SENDER_EMAIL || 'admin@rakshaireland.org';
+const SENDER_EMAIL = process.env.SENDER_EMAIL || 'anshu.kumar72003@gmail.com';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://your-domain.com';
 
 exports.handler = async (event) => {

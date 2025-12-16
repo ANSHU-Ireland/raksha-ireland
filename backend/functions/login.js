@@ -45,7 +45,7 @@ exports.handler = async (event) => {
       };
     }
 
-    const { email, password } = body;
+    const { email, password, deviceId } = body;
     
     if (!email || !password) {
       return {
@@ -80,7 +80,8 @@ exports.handler = async (event) => {
     if (user.status !== 'activated') {
       let message = 'Account not activated';
       if (user.status === 'pending') {
-        message = 'Account pending admin approval';
+        // Updated user-friendly message for accounts awaiting approval
+        message = 'This email is under process of verification';
       } else if (user.status === 'approved') {
         message = 'Account approved but not activated. Please check your email for activation link.';
       }
@@ -95,6 +96,22 @@ exports.handler = async (event) => {
         })
       };
     }
+
+    // Check if already logged in on another device
+    // Only enforce if both deviceId from request and stored loggedInDeviceId exist
+    if (deviceId && user.loggedInDeviceId && user.loggedInDeviceId !== deviceId) {
+      console.log('Login rejected: Account already logged in on device:', user.loggedInDeviceId, 'Attempted from:', deviceId);
+      return {
+        statusCode: 403,
+        headers,
+        body: JSON.stringify({ 
+          error: 'Device limit reached',
+          message: 'This account is already logged in on another device. Please log out from the other device first.'
+        })
+      };
+    }
+    
+    console.log('Device check passed. deviceId:', deviceId, 'stored:', user.loggedInDeviceId);
 
     // Try Cognito authentication first if configured
     let authSuccess = false;
@@ -151,17 +168,28 @@ exports.handler = async (event) => {
 
     const token = jwt.sign(tokenPayload, JWT_SECRET);
 
-    // Update last login timestamp
+    // Update last login timestamp and device ID
+    const updateExpression = deviceId 
+      ? 'SET lastLoginAt = :timestamp, loggedInDeviceId = :deviceId'
+      : 'SET lastLoginAt = :timestamp';
+    
+    const expressionValues = deviceId
+      ? {
+          ':timestamp': new Date().toISOString(),
+          ':deviceId': deviceId
+        }
+      : {
+          ':timestamp': new Date().toISOString()
+        };
+    
     await dynamodb.update({
       TableName: TABLE_NAME,
       Key: { email: email.toLowerCase() },
-      UpdateExpression: 'SET lastLoginAt = :timestamp',
-      ExpressionAttributeValues: {
-        ':timestamp': new Date().toISOString()
-      }
+      UpdateExpression: updateExpression,
+      ExpressionAttributeValues: expressionValues
     }).promise();
 
-    console.log('User logged in successfully:', user.email);
+    console.log('User logged in successfully:', user.email, 'Device:', deviceId || 'unknown');
 
     return {
       statusCode: 200,

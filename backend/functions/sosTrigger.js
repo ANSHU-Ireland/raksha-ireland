@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk');
 const { kRing } = require('h3-js');
+const https = require('https');
 
 // Initialize AWS services
 const dynamodb = new AWS.DynamoDB.DocumentClient();
@@ -267,16 +268,53 @@ async function sendNotificationsToNearbyUsers(users, sosAlert, location) {
     badge: 1
   };
 
-  // Send notifications (you would integrate with Expo Push Notifications here)
+  // Minimal Expo push sender using Node https (no extra deps)
+  const sendExpoPush = (token, payload) => new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      to: token,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: payload.data,
+      priority: 'high',
+      badge: 1,
+    });
+    const options = {
+      hostname: 'exp.host',
+      path: '/--/api/v2/push/send',
+      method: 'POST',
+      port: 443,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip, deflate',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => resolve({ statusCode: res.statusCode, body: data }));
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+
+  // Send notifications to each nearby user's Expo token
   for (const user of users) {
     try {
-      // For now, just log the notification that would be sent
-      console.log(`Notification would be sent to ${user.email} (${user.pushToken}):`, notificationPayload);
-      
-      // TODO: Integrate with Expo Push Notifications
-      // await sendExpoPushNotification(user.pushToken, notificationPayload);
-      
-      results.successful++;
+      if (!user.pushToken || !String(user.pushToken).startsWith('ExponentPushToken')) {
+        console.warn(`Skipping user without valid Expo token: ${user.email}`);
+        continue;
+      }
+      const resp = await sendExpoPush(user.pushToken, notificationPayload);
+      if (resp.statusCode === 200) {
+        results.successful++;
+      } else {
+        results.failed++;
+        results.errors.push({ email: user.email, error: `HTTP ${resp.statusCode}` });
+      }
     } catch (error) {
       console.error(`Failed to send notification to ${user.email}:`, error);
       results.failed++;

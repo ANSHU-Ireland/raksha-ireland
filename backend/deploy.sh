@@ -12,7 +12,7 @@ REGION="eu-west-1"
 FUNCTION_PREFIX="raksha"
 
 # Functions to deploy
-FUNCTIONS=("signup" "login" "approveUser" "activateUser" "sosTrigger" "health")
+FUNCTIONS=("signup" "login" "logout" "approveUser" "activateUser" "sosTrigger" "health")
 
 # Create deployment directory
 mkdir -p deploy

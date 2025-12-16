@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
 
-const API_BASE_URL = 'http://localhost:3000';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 function App() {
   const [users, setUsers] = useState([]);
@@ -146,6 +146,7 @@ function App() {
                   <th>Name</th>
                   <th>Email</th>
                   <th>Phone</th>
+                  <th>ID Document</th>
                   <th>Status</th>
                   <th>Registered</th>
                   <th>Actions</th>
@@ -157,6 +158,20 @@ function App() {
                     <td className="user-name">{user.name || 'N/A'}</td>
                     <td className="user-email">{user.email}</td>
                     <td className="user-phone">{user.phone || 'N/A'}</td>
+                    <td className="user-document">
+                      {user.idDocument ? (
+                        <a 
+                          href={`${API_BASE_URL}${user.idDocument.path}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="document-link"
+                        >
+                          📄 View Document
+                        </a>
+                      ) : (
+                        <span className="no-document">No document</span>
+                      )}
+                    </td>
                     <td>{getStatusBadge(user.status)}</td>
                     <td className="user-date">{formatDate(user.createdAt)}</td>
                     <td className="actions">
