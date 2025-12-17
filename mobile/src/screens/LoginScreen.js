@@ -37,9 +37,55 @@ export default function LoginScreen({ navigation, onLogin }) {
         const { email, password } = JSON.parse(saved);
         setCredentials({ email, password });
         setRememberMe(true);
+        
+        // Auto-login if Remember Me was previously enabled
+        await performAutoLogin(email, password);
       }
     } catch (error) {
       console.error('Failed to load saved credentials:', error);
+    }
+  };
+
+  const performAutoLogin = async (email, password) => {
+    try {
+      setLoading(true);
+      
+      // Get unique device identifier (with fallback)
+      let deviceId = null;
+      try {
+        deviceId = await Device.getDeviceIdAsync();
+        console.log('[Auto-Login] Device ID:', deviceId);
+      } catch (deviceError) {
+        console.warn('[Auto-Login] Failed to get device ID:', deviceError);
+      }
+      
+      const result = await loginUser({ email, password, deviceId });
+      if (result.success) {
+        // Fetch Supabase user UUID and attach to user object
+        const supabaseUserId = await ensureSupabaseUserId(result.user);
+        const userWithSupabaseId = {
+          ...result.user,
+          supabaseUserId,
+        };
+        console.log('[Auto-Login] Success, navigating to Home');
+        
+        // Store user session
+        if (onLogin) {
+          await onLogin(userWithSupabaseId);
+        }
+        // Navigate to home
+        navigation.replace('Home');
+      } else {
+        // Auto-login failed, clear saved credentials
+        await AsyncStorage.removeItem('rememberedCredentials');
+        setRememberMe(false);
+        console.log('[Auto-Login] Failed, credentials may be invalid');
+      }
+    } catch (error) {
+      console.error('[Auto-Login] Error:', error);
+      // Don't show alert for auto-login failures, just stay on login screen
+    } finally {
+      setLoading(false);
     }
   };
 
