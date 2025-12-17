@@ -322,9 +322,9 @@ app.post('/login', async (req, res) => {
   
   if (!userData) {
     // User not found - require signup first
-    return res.status(401).json({
+    return res.status(404).json({
       success: false,
-      message: 'User not found. Please sign up first.'
+      message: 'Account has not been registered yet'
     });
   }
 

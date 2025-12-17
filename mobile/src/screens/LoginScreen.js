@@ -142,7 +142,13 @@ export default function LoginScreen({ navigation, onLogin }) {
       }
     } catch (error) {
       const msg = (error?.message || '').toLowerCase();
-      if (msg.includes('pending') || msg.includes('under process') || msg.includes('verification')) {
+      if (msg.includes('not been registered') || msg.includes('not found') || msg.includes('sign up first')) {
+        Alert.alert(
+          'Account Not Registered',
+          'Account has not been registered yet. Please sign up first.',
+          [{ text: 'OK', style: 'default' }]
+        );
+      } else if (msg.includes('pending') || msg.includes('under process') || msg.includes('verification')) {
         Alert.alert(
           'Under Verification',
           'This email is under process of verification. Please wait for admin approval.'
