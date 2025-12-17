@@ -176,6 +176,7 @@ const crypto = require('crypto');
 const AWS = require('aws-sdk');
 
 // Optional SES setup for EC2 (emails will only send if IAM/creds + SES configured)
+AWS.config.update({ region: process.env.AWS_REGION || 'eu-west-1' });
 const ses = new AWS.SES();
 const SENDER_EMAIL = process.env.SENDER_EMAIL || 'anshu.kumar72003@gmail.com';
 
