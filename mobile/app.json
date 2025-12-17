@@ -8,11 +8,6 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": "raksha",
-    "extra": {
-      "eas": {
-        "projectId": "raksha-ireland-mobile-dev"
-      }
-    },
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -58,6 +53,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c5847c5c-d0fd-4ee2-afd0-c0d7f2f853c3"
+      }
     }
   }
 }

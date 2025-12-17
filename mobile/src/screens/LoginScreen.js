@@ -53,7 +53,8 @@ export default function LoginScreen({ navigation, onLogin }) {
       // Get unique device identifier (with fallback)
       let deviceId = null;
       try {
-        deviceId = await Device.getDeviceIdAsync();
+        // Use a combination of device properties for a unique identifier
+        deviceId = `${Device.modelName || 'unknown'}_${Device.osName || 'unknown'}_${Device.osVersion || 'unknown'}_${Device.osBuildId || 'unknown'}`;
         console.log('[Auto-Login] Device ID:', deviceId);
       } catch (deviceError) {
         console.warn('[Auto-Login] Failed to get device ID:', deviceError);
@@ -107,7 +108,8 @@ export default function LoginScreen({ navigation, onLogin }) {
       // Get unique device identifier (with fallback)
       let deviceId = null;
       try {
-        deviceId = await Device.getDeviceIdAsync();
+        // Use a combination of device properties for a unique identifier
+        deviceId = `${Device.modelName || 'unknown'}_${Device.osName || 'unknown'}_${Device.osVersion || 'unknown'}_${Device.osBuildId || 'unknown'}`;
         console.log('[Login] Device ID:', deviceId);
       } catch (deviceError) {
         console.warn('[Login] Failed to get device ID:', deviceError);

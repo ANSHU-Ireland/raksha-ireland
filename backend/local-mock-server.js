@@ -307,6 +307,7 @@ app.post('/signup', upload.single('idDocument'), async (req, res) => {
 // Mock login endpoint
 app.post('/login', async (req, res) => {
   console.log('🔐 Login request for:', req.body.email);
+  console.log('📱 Device ID:', req.body.deviceId);
   console.log('📦 Stored users:', Array.from(users.keys()));
   
   if (!req.body.email || !req.body.password) {
@@ -356,11 +357,59 @@ app.post('/login', async (req, res) => {
     return res.status(500).json({ success: false, message: 'Login failed' });
   }
   
+  // Check device ID for single device enforcement
+  const deviceId = req.body.deviceId;
+  if (deviceId && userData.deviceId && userData.deviceId !== deviceId) {
+    console.log('❌ Device mismatch - Account already logged in on another device');
+    console.log('   Stored device:', userData.deviceId);
+    console.log('   Attempting device:', deviceId);
+    return res.status(409).json({
+      success: false,
+      message: 'The account is already logged in on another device'
+    });
+  }
+  
+  // Store/update device ID
+  if (deviceId) {
+    userData.deviceId = deviceId;
+    userData.lastLoginAt = new Date().toISOString();
+    users.set(email, userData);
+    console.log('✅ Device ID stored for user:', email);
+  }
+  
   // Mock successful login
   res.json({
     success: true,
     token: 'mock-jwt-token-' + Date.now(),
     user: userData
+  });
+});
+
+// Logout endpoint - Clear device ID
+app.post('/logout', async (req, res) => {
+  console.log('🚪 Logout request for:', req.body.email);
+  
+  if (!req.body.email) {
+    return res.status(400).json({
+      success: false,
+      message: 'Email required'
+    });
+  }
+  
+  const email = String(req.body.email).toLowerCase();
+  const userData = users.get(email);
+  
+  if (userData) {
+    // Clear device ID to allow login from another device
+    delete userData.deviceId;
+    userData.lastLogoutAt = new Date().toISOString();
+    users.set(email, userData);
+    console.log('✅ Device ID cleared for user:', email);
+  }
+  
+  res.json({
+    success: true,
+    message: 'Logged out successfully'
   });
 });
 

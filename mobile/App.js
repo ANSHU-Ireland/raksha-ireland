@@ -167,10 +167,12 @@ export default function App() {
         await logoutUser(user.email);
       }
       
+      // Clear all user-related storage
       await AsyncStorage.removeItem('user');
+      await AsyncStorage.removeItem('rememberedCredentials');
       setUser(null);
       setUserEmail(null);
-      console.log('User session cleared');
+      console.log('User session and credentials cleared');
     } catch (error) {
       console.error('Failed to clear user session:', error);
     }
