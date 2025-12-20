@@ -341,7 +341,9 @@ app.post('/signup', upload.single('idDocument'), async (req, res) => {
     
     // Store user data
     if (supabase) {
+      const { randomUUID } = require('crypto');
       const row = {
+        id: randomUUID(), // Generate UUID for id field
         email,
         full_name: req.body.name,
         phone_number: req.body.phone,
