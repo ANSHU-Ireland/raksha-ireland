@@ -156,3 +156,53 @@ echo ""
 echo "Now test from your machine:"
 echo "  curl http://3.254.75.134/api/health"
 echo "  open http://3.254.75.134/admin/"
+
+# 10. Optional fallback: serve admin at root if /admin fails
+echo ""
+echo "=== Evaluating Admin Panel Fallback ==="
+ADMIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/admin/)
+if [ "$ADMIN_STATUS" -ge 500 ] || [ "$ADMIN_STATUS" -eq 000 ]; then
+    echo "Admin at /admin/ not healthy (status: $ADMIN_STATUS). Applying root fallback."
+    sudo tee /etc/nginx/sites-available/raksha > /dev/null << 'NGINXCONF_ROOT'
+server {
+        listen 80;
+        listen [::]:80;
+
+        server_name _;
+
+        # Backend API - strip /api prefix
+        location /api/ {
+                rewrite ^/api/(.*)$ /$1 break;
+                proxy_pass http://localhost:3000;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_cache_bypass $http_upgrade;
+        }
+
+        # Serve Admin Panel at root
+        location / {
+                alias /home/ubuntu/raksha-ireland/admin-panel/build/;
+                try_files $uri $uri/ /index.html;
+                index index.html;
+        }
+
+        # Health check (direct backend)
+        location = /health {
+                proxy_pass http://localhost:3000/health;
+        }
+}
+NGINXCONF_ROOT
+
+    echo "=== Testing Nginx Config (root fallback) ==="
+    sudo nginx -t || { echo "ERROR: Nginx config failed under root fallback"; exit 1; }
+    echo "=== Reloading Nginx (root fallback) ==="
+    sudo systemctl reload nginx
+    echo "=== Retesting Admin at root ==="
+    curl -s http://localhost/ | grep -o "<title>.*</title>" || echo "Admin at root check failed"
+    echo "Root fallback applied. Access admin at /"
+fi
