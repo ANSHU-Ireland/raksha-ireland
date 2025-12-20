@@ -74,17 +74,7 @@ const upload = multer({
 });
 
 // Initialize Supabase client (server-side with service role)
-let supabase = null;
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-console.log('🔧 Environment check:', {
-  hasSupabaseUrl: !!SUPABASE_URL,
-  hasSupabaseKey: !!SUPABASE_SERVICE_ROLE_KEY,
-  nodeVersion: process.version
-});
-
-if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+ASE_SERVICE_ROLE_KEY) {
   supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: {
       autoRefreshToken: false,
@@ -102,7 +92,17 @@ async function sbGetUserByEmail(email) {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('*')
+      .select('*')let supabase = null;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+console.log('🔧 Environment check:', {
+  hasSupabaseUrl: !!SUPABASE_URL,
+  hasSupabaseKey: !!SUPABASE_SERVICE_ROLE_KEY,
+  nodeVersion: process.version
+});
+
+if (SUPABASE_URL && SUPAB
       .eq('email', String(email).toLowerCase())
       .maybeSingle();
     if (error) throw error;
@@ -116,15 +116,21 @@ async function sbGetUserByEmail(email) {
 async function sbInsertUser(row) {
   if (!supabase) return null;
   try {
+    console.log('🔵 Attempting to insert user:', JSON.stringify(row, null, 2));
     const { data, error } = await supabase
       .from('users')
       .insert([row])
       .select('*')
       .single();
-    if (error) throw error;
+    if (error) {
+      console.error('🔴 Supabase insert error details:', JSON.stringify(error, null, 2));
+      throw error;
+    }
+    console.log('✅ User inserted successfully:', data?.id || data?.email);
     return data;
   } catch (e) {
-    console.error('Supabase insert user error:', e.message || e);
+    console.error('🔴 Supabase insert user error:', e.message || e);
+    console.error('🔴 Full error object:', JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
     return null;
   }
 }

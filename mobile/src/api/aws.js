@@ -6,24 +6,25 @@ import { supabase } from '../lib/supabaseClient';
 
 // API Configuration: choose based on device type
 // - iOS simulator: use localhost with SSH tunnel
-// - Physical devices: use EC2 public IP
+// - Physical devices: use EC2 public IP via Nginx (/api prefix)
 // - Android emulator: use 10.0.2.2 to reach host
 const getDefaultBaseUrl = () => {
   const isDevice = Constants.isDevice;
   
   if (Platform.OS === 'ios') {
     // iOS simulator uses localhost (requires SSH tunnel), physical devices use EC2
-    return isDevice ? 'http://3.254.75.134:3000' : 'http://localhost:3000';
+    return isDevice ? 'http://3.254.75.134/api' : 'http://localhost:3000';
   }
   if (Platform.OS === 'android') {
     // Android emulator uses 10.0.2.2, physical devices use EC2
-    return isDevice ? 'http://3.254.75.134:3000' : 'http://10.0.2.2:3000';
+    // Check if isDevice is explicitly true, otherwise assume physical device for release builds
+    return (isDevice === false) ? 'http://10.0.2.2:3000' : 'http://3.254.75.134/api';
   }
   return 'http://localhost:3000';
 };
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || getDefaultBaseUrl();
-console.log('[API] Base URL:', API_BASE_URL, '| isDevice:', Constants.isDevice);
+console.log('[API] Base URL:', API_BASE_URL, '| isDevice:', Constants.isDevice, '| Platform:', Platform.OS);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
