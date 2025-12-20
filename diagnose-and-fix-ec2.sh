@@ -220,9 +220,69 @@ echo ""
 
 echo "Diagnostics complete. No config changes applied."
 
-# Optional fallback only when explicitly enabled
-ADMIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/admin/)
-if [ "${APPLY_FALLBACK:-0}" = "1" ] && { [ "$ADMIN_STATUS" -ge 500 ] || [ "$ADMIN_STATUS" -eq 000 ]; }; then
-    echo "APPLY_FALLBACK=1 set and admin unhealthy; would apply root fallback here."
-    echo "(Fallback disabled by default for diagnostic integrity)"
+# Optional admin fix: deploy build to /var/www and set alias to that path
+if [ "${APPLY_ADMIN_FIX:-0}" = "1" ]; then
+    echo ""; echo "========================================"; echo "APPLYING ADMIN PANEL FIX"; echo "========================================";
+    echo "=== 1) Preparing /var/www/raksha-admin ==="
+    sudo mkdir -p /var/www/raksha-admin
+    echo "=== 2) Syncing latest build ==="
+    cd /home/ubuntu/raksha-ireland/admin-panel && npm install && npm run build
+    sudo rsync -a /home/ubuntu/raksha-ireland/admin-panel/build/ /var/www/raksha-admin/
+    echo "=== 3) Setting safe permissions ==="
+    sudo find /var/www/raksha-admin -type d -exec chmod 755 {} \;
+    sudo find /var/www/raksha-admin -type f -exec chmod 644 {} \;
+
+    echo "=== 4) Updating Nginx site to use /var/www path ==="
+    sudo tee /etc/nginx/sites-available/raksha > /dev/null << 'NGINXCONF_ADMIN'
+server {
+        listen 80;
+        listen [::]:80;
+
+        server_name _;
+
+        # Backend API - strip /api prefix
+        location /api/ {
+                rewrite ^/api/(.*)$ /$1 break;
+                proxy_pass http://localhost:3000;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_cache_bypass $http_upgrade;
+        }
+
+        # Admin Panel under /admin
+        location = /admin { return 301 /admin/; }
+        location /admin/ {
+                alias /var/www/raksha-admin/;
+                try_files $uri $uri/ /admin/index.html;
+                index index.html;
+        }
+
+        # Root redirect to admin
+        location = / { return 301 /admin/; }
+}
+NGINXCONF_ADMIN
+
+    echo "=== 5) Disable conflicting site (raksha.conf) if present ==="
+    if [ -L /etc/nginx/sites-enabled/raksha.conf ]; then
+        sudo rm /etc/nginx/sites-enabled/raksha.conf
+        echo "Removed /etc/nginx/sites-enabled/raksha.conf"
+    fi
+
+    echo "=== 6) Test and reload Nginx ==="
+    sudo nginx -t || { echo "ERROR: Nginx test failed"; exit 1; }
+    sudo systemctl reload nginx
+
+    echo "=== 7) Verify admin static asset paths under /admin ==="
+    MANIFEST=/var/www/raksha-admin/asset-manifest.json
+    if [ -f "$MANIFEST" ]; then
+        MAIN_JS=$(grep -o 'static/js/[^" ]*' "$MANIFEST" | head -n1)
+        echo "- HEAD /admin/$MAIN_JS"; curl -s -I "http://localhost/admin/$MAIN_JS" | tr -d '\r'
+    else
+        echo "asset-manifest.json not found in /var/www/raksha-admin"
+    fi
 fi
