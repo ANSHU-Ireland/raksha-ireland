@@ -169,7 +169,7 @@ function App() {
                     <td className="user-email">{user.email}</td>
                     <td className="user-phone">{user.phone || 'N/A'}</td>
                     <td className="user-document">
-                      {user.idDocument ? (
+                      {user.idDocument?.path ? (
                         <a 
                           href={`${API_BASE_URL}${user.idDocument.path}`} 
                           target="_blank" 

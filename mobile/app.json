@@ -25,7 +25,10 @@
           "location",
           "remote-notification"
         ],
-        "NSUserTrackingUsageDescription": "Raksha uses tracking to provide emergency services to users in your area."
+        "NSUserTrackingUsageDescription": "Raksha uses tracking to provide emergency services to users in your area.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
       },
       "config": {
         "usesNonExemptEncryption": false

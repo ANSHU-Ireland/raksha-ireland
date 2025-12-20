@@ -1,19 +1,29 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { sendSOSAlertSupabase, getAlertHistorySupabase, markMyLatestAlertResolved, getActiveAlertsSupabase } from './supabaseApi';
 import { supabase } from '../lib/supabaseClient';
 
-// API Configuration: prefer env; else choose sensible local defaults per platform
-// - iOS simulator can reach `http://localhost:3000`
-// - Android emulator uses `http://10.0.2.2:3000` to reach host machine
-// - Physical devices require a LAN IP (set `EXPO_PUBLIC_API_URL`)
+// API Configuration: choose based on device type
+// - iOS simulator: use localhost with SSH tunnel
+// - Physical devices: use EC2 public IP
+// - Android emulator: use 10.0.2.2 to reach host
 const getDefaultBaseUrl = () => {
-  if (Platform.OS === 'ios') return 'http://localhost:3000';
-  if (Platform.OS === 'android') return 'http://10.0.2.2:3000';
+  const isDevice = Constants.isDevice;
+  
+  if (Platform.OS === 'ios') {
+    // iOS simulator uses localhost (requires SSH tunnel), physical devices use EC2
+    return isDevice ? 'http://3.254.75.134:3000' : 'http://localhost:3000';
+  }
+  if (Platform.OS === 'android') {
+    // Android emulator uses 10.0.2.2, physical devices use EC2
+    return isDevice ? 'http://3.254.75.134:3000' : 'http://10.0.2.2:3000';
+  }
   return 'http://localhost:3000';
 };
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || getDefaultBaseUrl();
+console.log('[API] Base URL:', API_BASE_URL, '| isDevice:', Constants.isDevice);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
