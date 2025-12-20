@@ -20,11 +20,11 @@
     "h3-js": "^4.3.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "cors": "^2.8.5",
+    "express": "^5.2.1"
   },
   "devDependencies": {
-    "cors": "^2.8.5",
-    "express": "^5.2.1",
     "serverless": "^3.39.0",
     "serverless-offline": "^13.8.0"
   }
