@@ -50,9 +50,17 @@ echo "✅ Admin panel built"
 # Step 5: Configure Nginx
 echo ""
 echo "🌐 Step 5/5: Configuring Nginx..."
+
+# Fix server_names_hash_bucket_size
+sudo sed -i 's/# server_names_hash_bucket_size 64;/server_names_hash_bucket_size 128;/' /etc/nginx/nginx.conf || true
+if ! grep -q "server_names_hash_bucket_size" /etc/nginx/nginx.conf; then
+    sudo sed -i '/http {/a \    server_names_hash_bucket_size 128;' /etc/nginx/nginx.conf
+fi
+
 sudo tee /etc/nginx/sites-available/raksha > /dev/null << 'NGINX_EOF'
 server {
-    listen 80;
+    listen 80 default_server;
+    listen [::]:80 default_server;
     server_name _;
 
     # Backend API - strip /api prefix
