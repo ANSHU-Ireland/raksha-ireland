@@ -14,7 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "@supabase/supabase-js": "^2.87.1",
-    "aws-sdk": "^2.1692.0",
+    "@aws-sdk/client-ses": "^3.671.0",
     "bcryptjs": "^3.0.2",
     "dotenv": "^17.2.3",
     "h3-js": "^4.3.0",

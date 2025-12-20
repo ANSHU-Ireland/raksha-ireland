@@ -268,11 +268,11 @@ app.get('/health', (req, res) => {
 
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const AWS = require('aws-sdk');
+const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
 
 // Optional SES setup for EC2 (emails will only send if IAM/creds + SES configured)
-AWS.config.update({ region: process.env.AWS_REGION || 'eu-west-1' });
-const ses = new AWS.SES();
+const AWS_REGION = process.env.AWS_REGION || 'eu-west-1';
+const sesClient = new SESClient({ region: AWS_REGION });
 const SENDER_EMAIL = process.env.SENDER_EMAIL || 'anshu.kumar72003@gmail.com';
 
 // Mock signup endpoint with document upload
@@ -393,7 +393,7 @@ app.post('/signup', upload.single('idDocument'), async (req, res) => {
           }
         }
       };
-      await ses.sendEmail(emailParams).promise();
+      await sesClient.send(new SendEmailCommand(emailParams));
       console.log('📧 Signup confirmation email sent to:', email);
     } catch (e) {
       console.warn('✉️  Signup email send skipped/failed:', e.message || e);
