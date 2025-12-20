@@ -10,6 +10,10 @@ echo "=== 1. Current Nginx Config ==="
 cat /etc/nginx/sites-available/raksha
 echo ""
 
+echo "=== 1a. Check for existing default_server entries ==="
+grep -R "default_server" /etc/nginx/sites-enabled /etc/nginx/sites-available /etc/nginx/nginx.conf || echo "No default_server found in configs"
+echo ""
+
 # 2. Check what backend is actually receiving
 echo "=== 2. Backend Status ==="
 pm2 status
@@ -31,12 +35,12 @@ pm2 logs backend --lines 10 --nostream
 echo ""
 
 # 6. Fix Nginx configuration
-echo "=== 6. Applying Fixed Nginx Config ==="
+echo "=== 6. Applying Fixed Nginx Config (no default_server) ==="
 sudo tee /etc/nginx/sites-available/raksha > /dev/null << 'NGINXCONF'
 server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-    
+    listen 80;
+    listen [::]:80;
+
     server_name _;
 
     # Backend API - strip /api prefix
@@ -54,9 +58,9 @@ server {
     }
 
     # Admin Panel
-    location /admin {
-        alias /home/ubuntu/raksha-ireland/admin-panel/build;
-        try_files $uri $uri/ /admin/index.html =404;
+    location /admin/ {
+        alias /home/ubuntu/raksha-ireland/admin-panel/build/;
+        try_files $uri $uri/ /admin/index.html;
         index index.html;
     }
 
@@ -79,8 +83,39 @@ if [ $? -eq 0 ]; then
     sudo systemctl reload nginx
     echo "Nginx reloaded successfully"
 else
-    echo "ERROR: Nginx config test failed!"
-    exit 1
+    echo "ERROR: Nginx config test failed! Attempting fallback without rewrite..."
+    # Fallback: use proxy_pass with trailing slash (no rewrite)
+    sudo tee /etc/nginx/sites-available/raksha > /dev/null << 'NGINXCONF_FALLBACK'
+server {
+    listen 80;
+    listen [::]:80;
+
+    server_name _;
+
+    location /api/ {
+        proxy_pass http://localhost:3000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /admin/ {
+        alias /home/ubuntu/raksha-ireland/admin-panel/build/;
+        try_files $uri $uri/ /admin/index.html;
+        index index.html;
+    }
+
+    location = / {
+        return 301 /admin/;
+    }
+}
+NGINXCONF_FALLBACK
+
+    echo "=== Retesting Nginx Config (fallback) ==="
+    sudo nginx -t || { echo "ERROR: Nginx config still failing"; exit 1; }
+    echo "=== Reloading Nginx (fallback) ==="
+    sudo systemctl reload nginx
 fi
 echo ""
 
