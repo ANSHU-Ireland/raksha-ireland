@@ -57,17 +57,18 @@ server {
         proxy_cache_bypass $http_upgrade;
     }
 
-    # Admin Panel
+    # Admin Panel under /admin with robust alias mapping
+    location = /admin { return 301 /admin/; }
+    location = /admin/index.html { alias /var/www/raksha-admin/index.html; }
+    location /admin/static/ { alias /var/www/raksha-admin/static/; }
     location /admin/ {
-        alias /home/ubuntu/raksha-ireland/admin-panel/build/;
+        alias /var/www/raksha-admin/;
         try_files $uri $uri/ /admin/index.html;
         index index.html;
     }
 
     # Root - redirect to admin
-    location = / {
-        return 301 /admin/;
-    }
+    location = / { return 301 /admin/; }
 }
 NGINXCONF
 
@@ -254,12 +255,14 @@ server {
                 proxy_cache_bypass $http_upgrade;
         }
 
-        # Admin Panel under /admin
+        # Admin Panel under /admin with exact-match locations to avoid cycles
         location = /admin { return 301 /admin/; }
+        location = /admin/index.html { alias /var/www/raksha-admin/index.html; }
+        location /admin/static/ { alias /var/www/raksha-admin/static/; }
         location /admin/ {
-                alias /var/www/raksha-admin/;
-                try_files $uri $uri/ /admin/index.html;
-                index index.html;
+            alias /var/www/raksha-admin/;
+            try_files $uri $uri/ /admin/index.html;
+            index index.html;
         }
 
         # Root redirect to admin
@@ -279,10 +282,20 @@ NGINXCONF_ADMIN
 
     echo "=== 7) Verify admin static asset paths under /admin ==="
     MANIFEST=/var/www/raksha-admin/asset-manifest.json
+    echo "- Listing /var/www/raksha-admin (top)"
+    ls -lah /var/www/raksha-admin | head -n 20
+    echo "- Listing /var/www/raksha-admin/static/js"
+    ls -lah /var/www/raksha-admin/static/js | head -n 20 || echo "static/js not present"
     if [ -f "$MANIFEST" ]; then
         MAIN_JS=$(grep -o 'static/js/[^" ]*' "$MANIFEST" | head -n1)
-        echo "- HEAD /admin/$MAIN_JS"; curl -s -I "http://localhost/admin/$MAIN_JS" | tr -d '\r'
+        echo "- Manifest main JS: $MAIN_JS"
+        echo "- HEAD /admin/$MAIN_JS"
+        curl -s -I "http://localhost/admin/$MAIN_JS" | tr -d '\r'
+        echo "- GET Content-Type for /admin/$MAIN_JS"
+        curl -s -D - "http://localhost/admin/$MAIN_JS" -o /dev/null | tr -d '\r' | grep -i "Content-Type" || echo "No Content-Type header"
     else
         echo "asset-manifest.json not found in /var/www/raksha-admin"
     fi
+    echo "- HEAD /admin/index.html"
+    curl -s -I "http://localhost/admin/index.html" | tr -d '\r'
 fi
