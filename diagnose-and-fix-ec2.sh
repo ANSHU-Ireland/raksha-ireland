@@ -157,52 +157,72 @@ echo "Now test from your machine:"
 echo "  curl http://3.254.75.134/api/health"
 echo "  open http://3.254.75.134/admin/"
 
-# 10. Optional fallback: serve admin at root if /admin fails
 echo ""
-echo "=== Evaluating Admin Panel Fallback ==="
+echo "========================================"
+echo "ADMIN 500 DIAGNOSTICS"
+echo "========================================"
+
+# 10. Collect diagnostics without changing config
+echo "=== A. Nginx error log (last 50 lines) ==="
+sudo tail -n 50 /var/log/nginx/error.log || echo "No error.log readable"
+echo ""
+
+echo "=== B. Nginx access log (last 20 lines) ==="
+sudo tail -n 20 /var/log/nginx/access.log || echo "No access.log readable"
+echo ""
+
+echo "=== C. Enabled site configs ==="
+ls -l /etc/nginx/sites-enabled || true
+echo ""
+
+echo "=== D. Verify build files and permissions ==="
+ls -lah /home/ubuntu/raksha-ireland/admin-panel/build | head -n 20
+ls -lah /home/ubuntu/raksha-ireland/admin-panel/build/index.html || echo "index.html missing"
+echo ""
+
+echo "=== E. Test direct file serving via Nginx ==="
+echo "- HEAD /admin/index.html"
+curl -s -I http://localhost/admin/index.html | tr -d '\r'
+echo "- HEAD /index.html (root)"
+curl -s -I http://localhost/index.html | tr -d '\r'
+echo ""
+
+echo "=== F. Parse asset-manifest.json to probe static assets ==="
+MANIFEST=/home/ubuntu/raksha-ireland/admin-panel/build/asset-manifest.json
+if [ -f "$MANIFEST" ]; then
+    MAIN_JS=$(grep -o 'static/js/[^" ]*' "$MANIFEST" | head -n1)
+    MAIN_CSS=$(grep -o 'static/css/[^" ]*' "$MANIFEST" | head -n1)
+    echo "- Detected JS: $MAIN_JS"
+    echo "- Detected CSS: $MAIN_CSS"
+    if [ -n "$MAIN_JS" ]; then
+        echo "- HEAD /admin/$MAIN_JS"
+        curl -s -I "http://localhost/admin/$MAIN_JS" | tr -d '\r'
+        echo "- HEAD /$MAIN_JS (root)"
+        curl -s -I "http://localhost/$MAIN_JS" | tr -d '\r'
+    fi
+else
+    echo "asset-manifest.json not found"
+fi
+echo ""
+
+echo "=== G. Current site config content ==="
+for f in /etc/nginx/sites-enabled/*; do
+    echo "--- $f ---"; sudo sed -n '1,120p' "$f"; echo ""; done
+echo ""
+
+echo "=== H. Summarized guidance ==="
+echo "- If error.log shows 'open() failed' or 'No such file', check alias/root paths."
+echo "- For serving at /admin/, prefer: 'location /admin/ { alias /path/to/build/; try_files $uri $uri/ /admin/index.html; }'"
+echo "- For serving at root, prefer 'root /path/to/build;' with 'location / { try_files $uri $uri/ /index.html; }'"
+echo "- Ensure /home/ubuntu/raksha-ireland/admin-panel/build and files are world-readable (644) and dirs 755."
+echo "- Consider disabling conflicting sites: sudo rm /etc/nginx/sites-enabled/default (then nginx -t && reload)."
+echo ""
+
+echo "Diagnostics complete. No config changes applied."
+
+# Optional fallback only when explicitly enabled
 ADMIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/admin/)
-if [ "$ADMIN_STATUS" -ge 500 ] || [ "$ADMIN_STATUS" -eq 000 ]; then
-    echo "Admin at /admin/ not healthy (status: $ADMIN_STATUS). Applying root fallback."
-    sudo tee /etc/nginx/sites-available/raksha > /dev/null << 'NGINXCONF_ROOT'
-server {
-        listen 80;
-        listen [::]:80;
-
-        server_name _;
-
-        # Backend API - strip /api prefix
-        location /api/ {
-                rewrite ^/api/(.*)$ /$1 break;
-                proxy_pass http://localhost:3000;
-                proxy_http_version 1.1;
-                proxy_set_header Upgrade $http_upgrade;
-                proxy_set_header Connection 'upgrade';
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $scheme;
-                proxy_cache_bypass $http_upgrade;
-        }
-
-        # Serve Admin Panel at root
-        location / {
-                alias /home/ubuntu/raksha-ireland/admin-panel/build/;
-                try_files $uri $uri/ /index.html;
-                index index.html;
-        }
-
-        # Health check (direct backend)
-        location = /health {
-                proxy_pass http://localhost:3000/health;
-        }
-}
-NGINXCONF_ROOT
-
-    echo "=== Testing Nginx Config (root fallback) ==="
-    sudo nginx -t || { echo "ERROR: Nginx config failed under root fallback"; exit 1; }
-    echo "=== Reloading Nginx (root fallback) ==="
-    sudo systemctl reload nginx
-    echo "=== Retesting Admin at root ==="
-    curl -s http://localhost/ | grep -o "<title>.*</title>" || echo "Admin at root check failed"
-    echo "Root fallback applied. Access admin at /"
+if [ "${APPLY_FALLBACK:-0}" = "1" ] && { [ "$ADMIN_STATUS" -ge 500 ] || [ "$ADMIN_STATUS" -eq 000 ]; }; then
+    echo "APPLY_FALLBACK=1 set and admin unhealthy; would apply root fallback here."
+    echo "(Fallback disabled by default for diagnostic integrity)"
 fi
