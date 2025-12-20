@@ -2,7 +2,17 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+// Prefer same-origin API under /api; fallback to env or localhost
+const API_BASE_URL = (function() {
+  const envUrl = process.env.REACT_APP_API_URL;
+  if (envUrl && envUrl.trim()) return envUrl.trim();
+  try {
+    const origin = window.location.origin.replace(/\/$/, '');
+    return origin + '/api';
+  } catch (_) {
+    return 'http://localhost:3000';
+  }
+})();
 
 function App() {
   const [users, setUsers] = useState([]);
