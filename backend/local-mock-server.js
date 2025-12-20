@@ -10,6 +10,36 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Basic file-backed persistence for mock users
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir);
+}
+const usersFile = path.join(dataDir, 'users.json');
+function loadUsersFromFile(mapRef) {
+  try {
+    if (fs.existsSync(usersFile)) {
+      const raw = fs.readFileSync(usersFile, 'utf-8');
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        for (const u of arr) {
+          if (u && u.email) mapRef.set(String(u.email).toLowerCase(), u);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load users.json:', e.message || e);
+  }
+}
+function saveUsersToFile(mapRef) {
+  try {
+    const arr = Array.from(mapRef.values());
+    fs.writeFileSync(usersFile, JSON.stringify(arr, null, 2));
+  } catch (e) {
+    console.error('Failed to write users.json:', e.message || e);
+  }
+}
+
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -66,8 +96,73 @@ if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
   console.warn('⚠️  Supabase credentials not found - using in-memory fallback');
 }
 
+// Supabase users helpers (when configured)
+async function sbGetUserByEmail(email) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', String(email).toLowerCase())
+      .maybeSingle();
+    if (error) throw error;
+    return data || null;
+  } catch (e) {
+    console.error('Supabase get user error:', e.message || e);
+    return null;
+  }
+}
+
+async function sbInsertUser(row) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .insert([row])
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.error('Supabase insert user error:', e.message || e);
+    return null;
+  }
+}
+
+async function sbUpdateUserByEmail(email, patch) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .update(patch)
+      .eq('email', String(email).toLowerCase())
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.error('Supabase update user error:', e.message || e);
+    return null;
+  }
+}
+
+async function sbListUsers() {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, full_name, phone_number, status, role, created_at, updated_at, logged_in_device_id, last_login_at, last_logout_at');
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.error('Supabase list users error:', e.message || e);
+    return [];
+  }
+}
+
 // In-memory user storage for mock server
 const users = new Map();
+loadUsersFromFile(users);
 // Also keep a flat set of all registered push tokens for debugging
 const pushTokens = new Set();
 // In-memory fallback for alerts (used if Supabase not configured)
@@ -209,11 +304,13 @@ app.post('/signup', upload.single('idDocument'), async (req, res) => {
     const email = String(req.body.email || '').toLowerCase();
 
     // Prevent duplicate signup
-    if (users.has(email)) {
-      return res.status(409).json({
-        success: false,
-        message: 'An account with this email already exists'
-      });
+    if (supabase) {
+      const existing = await sbGetUserByEmail(email);
+      if (existing) {
+        return res.status(409).json({ success: false, message: 'An account with this email already exists' });
+      }
+    } else if (users.has(email)) {
+      return res.status(409).json({ success: false, message: 'An account with this email already exists' });
     }
 
     // Hash password
@@ -243,7 +340,26 @@ app.post('/signup', upload.single('idDocument'), async (req, res) => {
     };
     
     // Store user data
-    users.set(email, userData);
+    if (supabase) {
+      const row = {
+        email,
+        full_name: req.body.name,
+        phone_number: req.body.phone,
+        status: 'pending',
+        role: 'user',
+        temp_password_hash: tempPasswordHash,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      const created = await sbInsertUser(row);
+      if (!created) {
+        return res.status(500).json({ success: false, message: 'Failed to create user' });
+      }
+    } else {
+      users.set(email, userData);
+      saveUsersToFile(users);
+    }
+    saveUsersToFile(users);
 
     // Attempt to send a registration received email (non-blocking)
     try {
@@ -319,7 +435,25 @@ app.post('/login', async (req, res) => {
   
   // Get stored user
   const email = String(req.body.email).toLowerCase();
-  let userData = users.get(email);
+  let userData = null;
+  if (supabase) {
+    const sbUser = await sbGetUserByEmail(email);
+    if (sbUser) {
+      userData = {
+        userId: sbUser.id || sbUser.userId || undefined,
+        email: sbUser.email,
+        name: sbUser.full_name,
+        phone: sbUser.phone_number,
+        status: sbUser.status,
+        tempPasswordHash: sbUser.temp_password_hash,
+        deviceId: sbUser.logged_in_device_id,
+        createdAt: sbUser.created_at,
+        lastLoginAt: sbUser.last_login_at,
+      };
+    }
+  } else {
+    userData = users.get(email);
+  }
   
   if (!userData) {
     // User not found - require signup first
@@ -373,7 +507,16 @@ app.post('/login', async (req, res) => {
   if (deviceId) {
     userData.deviceId = deviceId;
     userData.lastLoginAt = new Date().toISOString();
-    users.set(email, userData);
+    if (supabase) {
+      await sbUpdateUserByEmail(email, {
+        logged_in_device_id: deviceId,
+        last_login_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    } else {
+      users.set(email, userData);
+      saveUsersToFile(users);
+    }
     console.log('✅ Device ID stored for user:', email);
   }
   
@@ -397,13 +540,27 @@ app.post('/logout', async (req, res) => {
   }
   
   const email = String(req.body.email).toLowerCase();
-  const userData = users.get(email);
+  let userData = null;
+  if (supabase) {
+    userData = await sbGetUserByEmail(email);
+  } else {
+    userData = users.get(email);
+  }
   
   if (userData) {
     // Clear device ID to allow login from another device
-    delete userData.deviceId;
-    userData.lastLogoutAt = new Date().toISOString();
-    users.set(email, userData);
+    if (supabase) {
+      await sbUpdateUserByEmail(email, {
+        logged_in_device_id: null,
+        last_logout_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    } else {
+      delete userData.deviceId;
+      userData.lastLogoutAt = new Date().toISOString();
+      users.set(email, userData);
+      saveUsersToFile(users);
+    }
     console.log('✅ Device ID cleared for user:', email);
   }
   
@@ -581,76 +738,124 @@ app.post('/sos', async (req, res) => {
 });
 
 // Admin endpoint - Get all users
-app.get('/admin/users', (req, res) => {
+app.get('/admin/users', async (req, res) => {
   console.log('👥 Admin: Get all users request');
-  
+  if (supabase) {
+    const allUsers = await sbListUsers();
+    const mapped = (allUsers || []).map(u => ({
+      userId: u.id,
+      email: u.email,
+      name: u.full_name || u.name || null,
+      phone: u.phone_number || u.phone || null,
+      status: u.status,
+      createdAt: u.created_at,
+      idDocument: u.id_document_path ? { path: u.id_document_path } : null,
+    }));
+    return res.json({ success: true, users: mapped, count: mapped.length });
+  }
   const allUsers = Array.from(users.values());
-  
-  res.json({
-    success: true,
-    users: allUsers,
-    count: allUsers.length
-  });
+  res.json({ success: true, users: allUsers, count: allUsers.length });
 });
 
 // Mock user approval endpoint (admin)
-app.post('/approve-user', (req, res) => {
-  console.log('✅ User approval request:', req.body.userId);
+app.post('/approve-user', async (req, res) => {
+  console.log('✅ User approval request:', req.body.userId || req.body.email);
   
-  // Find and update user status
   let updatedUser = null;
-  for (const [email, user] of users.entries()) {
-    if (user.userId === req.body.userId) {
-      user.status = 'activated';
-      user.approvedAt = new Date().toISOString();
-      users.set(email, user);
-      updatedUser = user;
-      break;
+  if (supabase) {
+    const id = req.body.userId;
+    let targetEmail = req.body.email;
+    if (!targetEmail && id) {
+      const { data } = await supabase.from('users').select('email').eq('id', id).maybeSingle();
+      targetEmail = data?.email;
     }
-  }
-  
-  if (!updatedUser) {
-    return res.status(404).json({
-      success: false,
-      message: 'User not found'
-    });
+    if (!targetEmail) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const patch = { status: 'activated', approved_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    const updated = await sbUpdateUserByEmail(targetEmail, patch);
+    if (!updated) {
+      return res.status(500).json({ success: false, message: 'Failed to update user' });
+    }
+    updatedUser = {
+      userId: updated.id,
+      email: updated.email,
+      name: updated.full_name,
+      phone: updated.phone_number,
+      status: updated.status,
+      approvedAt: updated.approved_at
+    };
+  } else {
+    for (const [email, user] of users.entries()) {
+      if (user.userId === req.body.userId) {
+        user.status = 'activated';
+        user.approvedAt = new Date().toISOString();
+        users.set(email, user);
+        saveUsersToFile(users);
+        updatedUser = user;
+        break;
+      }
+    }
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
   }
   
   res.json({
     success: true,
-    message: 'User approved and activation email sent',
-    userId: req.body.userId,
+    message: 'User approved',
+    userId: updatedUser.userId || req.body.userId,
     user: updatedUser
   });
 });
 
 // Mock user rejection endpoint (admin)
-app.post('/reject-user', (req, res) => {
-  console.log('❌ User rejection request:', req.body.userId);
+app.post('/reject-user', async (req, res) => {
+  console.log('❌ User rejection request:', req.body.userId || req.body.email);
   
-  // Find and update user status
   let updatedUser = null;
-  for (const [email, user] of users.entries()) {
-    if (user.userId === req.body.userId) {
-      user.status = 'rejected';
-      user.rejectedAt = new Date().toISOString();
-      users.set(email, user);
-      updatedUser = user;
-      break;
+  if (supabase) {
+    const id = req.body.userId;
+    let targetEmail = req.body.email;
+    if (!targetEmail && id) {
+      const { data } = await supabase.from('users').select('email').eq('id', id).maybeSingle();
+      targetEmail = data?.email;
     }
-  }
-  
-  if (!updatedUser) {
-    return res.status(404).json({
-      success: false,
-      message: 'User not found'
-    });
+    if (!targetEmail) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const patch = { status: 'rejected', updated_at: new Date().toISOString() };
+    const updated = await sbUpdateUserByEmail(targetEmail, patch);
+    if (!updated) {
+      return res.status(500).json({ success: false, message: 'Failed to update user' });
+    }
+    updatedUser = {
+      userId: updated.id,
+      email: updated.email,
+      name: updated.full_name,
+      phone: updated.phone_number,
+      status: updated.status
+    };
+  } else {
+    for (const [email, user] of users.entries()) {
+      if (user.userId === req.body.userId) {
+        user.status = 'rejected';
+        user.rejectedAt = new Date().toISOString();
+        users.set(email, user);
+        saveUsersToFile(users);
+        updatedUser = user;
+        break;
+      }
+    }
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
   }
   
   res.json({
     success: true,
     message: 'User registration rejected',
-    userId: req.body.userId,
+    userId: updatedUser.userId || req.body.userId,
     user: updatedUser
   });
 });

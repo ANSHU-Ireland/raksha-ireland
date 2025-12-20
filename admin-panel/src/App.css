@@ -1,16 +1,147 @@
-.App {
-  min-height: 100vh;
-  background-color: #f5f5f5;
+.root, :root {
+  --md-primary: #6750A4;
+  --md-primary-variant: #7C4DFF;
+  --md-on-primary: #FFFFFF;
+  --md-surface: #FFFFFF;
+  --md-background: #F7F7F7;
+  --md-outline: #E0E0E0;
+  --md-secondary: #4E8DF5;
+  --md-error: #D32F2F;
+  --md-success: #2E7D32;
+  --md-shadow-1: 0 1px 2px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.06);
+  --md-shadow-2: 0 2px 4px rgba(0,0,0,0.08), 0 6px 12px rgba(0,0,0,0.08);
 }
 
+html, body, #root { height: 100%; }
+body { font-family: 'Roboto', system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif; }
+
+.App {
+  min-height: 100vh;
+  background-color: var(--md-background);
+}
 .app-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 2rem;
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+  padding: 1.25rem 2rem;
   text-align: center;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--md-shadow-2);
   position: relative;
 }
+.refresh-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: var(--md-on-primary);
+  border: none;
+  color: var(--md-primary);
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  box-shadow: var(--md-shadow-1);
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.refresh-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--md-shadow-2);
+}
+.error-banner {
+  background-color: #fdecea;
+  color: var(--md-error);
+  padding: 1rem;
+  margin: 1rem 2rem;
+  border-radius: 12px;
+  border: 1px solid #f4c7c3;
+  box-shadow: var(--md-shadow-1);
+}
+.stat-card {
+  background: var(--md-surface);
+  padding: 1.25rem 1.5rem;
+  border-radius: 16px;
+  box-shadow: var(--md-shadow-1);
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.stat-number {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--md-primary);
+  margin-bottom: 0.25rem;
+}
+.users-table {
+  background: var(--md-surface);
+  border-radius: 16px;
+  box-shadow: var(--md-shadow-1);
+  overflow: hidden;
+}
+thead {
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+}
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background-color: #f1f3f4;
+  border: 1px solid var(--md-outline);
+  text-transform: none;
+}
+.status-pending {
+  background-color: #FFF8E1;
+  color: #8D6E63;
+}
+.status-active {
+  background-color: #E8F5E9;
+  color: var(--md-success);
+  border-color: #C8E6C9;
+}
+.status-rejected {
+  background-color: #FFEBEE;
+  color: var(--md-error);
+  border-color: #FFCDD2;
+}
+.btn-approve,
+.btn-reject {
+  padding: 0.55rem 1rem;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
+  box-shadow: var(--md-shadow-1);
+}
+.btn-approve {
+  background-color: var(--md-success);
+  color: #fff;
+}
+.btn-reject {
+  background-color: var(--md-error);
+  color: #fff;
+}
+.btn-approve:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--md-shadow-2);
+}
+.btn-reject:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--md-shadow-2);
+}
+.document-link:hover {
+  background-color: #eef2ff;
+  color: var(--md-secondary);
+}
+.document-link { color: var(--md-secondary); }
+/* legacy .App removed to prevent style conflicts */
+
+/* legacy header container removed; Material header defined above */
 
 .app-header h1 {
   font-size: 2.5rem;
@@ -22,24 +153,7 @@
   opacity: 0.9;
 }
 
-.refresh-btn {
-  position: absolute;
-  top: 2rem;
-  right: 2rem;
-  background: rgba(255, 255, 255, 0.2);
-  border: 2px solid white;
-  color: white;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 1rem;
-  transition: all 0.3s ease;
-}
-
-.refresh-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.05);
-}
+/* legacy refresh styles removed; Material version defined above */
 
 .container {
   max-width: 1400px;
@@ -51,17 +165,10 @@
   text-align: center;
   padding: 4rem;
   font-size: 1.5rem;
-  color: #667eea;
+  color: var(--md-primary);
 }
 
-.error-banner {
-  background-color: #fee;
-  color: #c33;
-  padding: 1rem;
-  margin: 1rem 2rem;
-  border-radius: 8px;
-  border-left: 4px solid #c33;
-}
+/* legacy error banner removed; Material version defined above */
 
 .stats {
   display: grid;
@@ -70,26 +177,14 @@
   margin-bottom: 2rem;
 }
 
-.stat-card {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  text-align: center;
-  transition: transform 0.3s ease;
-}
+/* legacy stat-card removed; using Material card defined above */
 
 .stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+  box-shadow: var(--md-shadow-2);
 }
 
-.stat-number {
-  font-size: 2.5rem;
-  font-weight: bold;
-  color: #667eea;
-  margin-bottom: 0.5rem;
-}
+/* legacy stat-number removed; Material number defined above */
 
 .stat-label {
   font-size: 0.9rem;
@@ -101,28 +196,21 @@
 .empty-state {
   text-align: center;
   padding: 4rem;
-  background: white;
-  border-radius: 12px;
-  color: #999;
+  background: var(--md-surface);
+  border-radius: 16px;
+  color: #666;
   font-size: 1.2rem;
+  box-shadow: var(--md-shadow-1);
 }
 
-.users-table {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
+/* legacy users-table removed; Material version defined above */
 
 table {
   width: 100%;
   border-collapse: collapse;
 }
 
-thead {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
+/* legacy thead gradient removed; Material version defined above */
 
 th {
   padding: 1rem;
@@ -156,7 +244,7 @@ td {
 }
 
 .user-email {
-  color: #667eea;
+  color: var(--md-secondary);
 }
 
 .user-phone {
@@ -169,34 +257,14 @@ td {
   font-size: 0.9rem;
 }
 
-.status-badge {
-  display: inline-block;
-  padding: 0.4rem 0.8rem;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
+/* legacy status-badge removed; Material chip version defined above */
 
-.status-pending {
-  background-color: #fff3cd;
-  color: #856404;
-}
-
-.status-active {
-  background-color: #d4edda;
-  color: #155724;
-}
-
-.status-rejected {
-  background-color: #f8d7da;
-  color: #721c24;
-}
+/* legacy status variants removed; Material variants defined above */
 
 .status-unknown {
-  background-color: #e2e3e5;
-  color: #383d41;
+  background-color: #ECEFF1;
+  color: #546E7A;
+  border-color: #CFD8DC;
 }
 
 .actions {
@@ -205,36 +273,7 @@ td {
   align-items: center;
 }
 
-.btn-approve,
-.btn-reject {
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.btn-approve {
-  background-color: #28a745;
-  color: white;
-}
-
-.btn-approve:hover:not(:disabled) {
-  background-color: #218838;
-  transform: scale(1.05);
-}
-
-.btn-reject {
-  background-color: #dc3545;
-  color: white;
-}
-
-.btn-reject:hover:not(:disabled) {
-  background-color: #c82333;
-  transform: scale(1.05);
-}
+/* legacy button styles removed; Material buttons defined above */
 
 .btn-approve:disabled,
 .btn-reject:disabled {
@@ -251,22 +290,7 @@ td {
   text-align: center;
 }
 
-.document-link {
-  color: #667eea;
-  text-decoration: none;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.document-link:hover {
-  background-color: #f0f0f0;
-  color: #764ba2;
-}
+/* legacy document link styles removed; Material-aligned link styles defined above */
 
 .no-document {
   color: #999;
