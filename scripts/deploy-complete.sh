@@ -59,8 +59,8 @@ fi
 
 sudo tee /etc/nginx/sites-available/raksha > /dev/null << 'NGINX_EOF'
 server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
+    listen 80;
+    listen [::]:80;
     server_name _;
 
     # Backend API - strip /api prefix
