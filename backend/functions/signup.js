@@ -7,7 +7,7 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 const ses = new AWS.SES();
 
 const TABLE_NAME = process.env.USERS_TABLE || 'Users';
-const SENDER_EMAIL = process.env.SENDER_EMAIL || 'anshu.kumar72003@gmail.com';
+const SENDER_EMAIL = process.env.SENDER_EMAIL || 'no-reply@raksha-ireland.com';
 
 exports.handler = async (event) => {
   console.log('Signup request:', JSON.stringify(event, null, 2));

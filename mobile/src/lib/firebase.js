@@ -4,13 +4,12 @@ import { getAnalytics, isSupported as analyticsSupported } from 'firebase/analyt
 
 // Firebase web configuration (public, not secret)
 const firebaseConfig = {
-  apiKey: 'AIzaSyBYsgLaHBAkiNXzh3pMnZH5jzfWF3_4MFk',
-  authDomain: 'raksha-ireland-d8840.firebaseapp.com',
-  projectId: 'raksha-ireland-d8840',
-  storageBucket: 'raksha-ireland-d8840.firebasestorage.app',
-  messagingSenderId: '389047725848',
-  appId: '1:389047725848:web:cc454e883f39147d5ff86d',
-  measurementId: 'G-0SK2JRMNGS',
+  apiKey: 'AIzaSyBLkrUSTdQsBgchVDOOvhv84vfntzaEyBU',
+  authDomain: 'raksha-ireland-app.firebaseapp.com',
+  projectId: 'raksha-ireland-app',
+  storageBucket: 'raksha-ireland-app.firebasestorage.app',
+  messagingSenderId: '267338469966',
+  appId: '1:267338469966:android:9f4dcf927a787fc673e91f',
 };
 
 // Initialize (avoid re-initializing in dev reloads)

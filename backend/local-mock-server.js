@@ -279,7 +279,7 @@ const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
 // Optional SES setup for EC2 (emails will only send if IAM/creds + SES configured)
 const AWS_REGION = process.env.AWS_REGION || 'eu-west-1';
 const sesClient = new SESClient({ region: AWS_REGION });
-const SENDER_EMAIL = process.env.SENDER_EMAIL || 'anshu.kumar72003@gmail.com';
+const SENDER_EMAIL = process.env.SENDER_EMAIL || 'no-reply@raksha-ireland.com';
 
 // Mock signup endpoint with document upload
 app.post('/signup', upload.single('idDocument'), async (req, res) => {

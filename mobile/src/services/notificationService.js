@@ -48,7 +48,7 @@ export async function registerForPushNotificationsAsync() {
     
     try {
       token = (await Notifications.getExpoPushTokenAsync({
-        projectId: 'raksha-ireland-mobile-dev',
+        projectId: 'c5847c5c-d0fd-4ee2-afd0-c0d7f2f853c3',
       })).data;
       console.log('Expo Push Token:', token);
       
